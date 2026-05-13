@@ -11,7 +11,6 @@ const CameraController = ({ isCameraLocked }) => {
   const activeCamera = useStore(state => state.director.activeCamera);
   const controlsRef = useRef(null);
 
-  // Sync R3F camera to Zustand state when bookmarks change
   useEffect(() => {
     camera.position.set(...activeCamera.position);
     camera.fov = activeCamera.fov;
@@ -28,24 +27,27 @@ const CameraController = ({ isCameraLocked }) => {
     if (!controls) return;
 
     const handleEnd = () => {
-      updateCamera({ 
+      updateCamera({
         position: [camera.position.x, camera.position.y, camera.position.z],
         target: [controls.target.x, controls.target.y, controls.target.z],
         fov: camera.fov
       });
     };
-    
+
     controls.addEventListener('end', handleEnd);
     return () => controls.removeEventListener('end', handleEnd);
   }, [camera, isCameraLocked, updateCamera]);
 
   return (
-    <OrbitControls 
+    <OrbitControls
       ref={controlsRef}
-      makeDefault 
-      enabled={!isCameraLocked} 
-      domElement={gl.domElement} 
-      dampingFactor={0.1}
+      makeDefault
+      enabled={!isCameraLocked}
+      domElement={gl.domElement}
+      enableDamping={true}
+      dampingFactor={0.05}
+      screenSpacePanning={true}
+      maxPolarAngle={Math.PI}
     />
   );
 };
@@ -55,7 +57,7 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
   const transformMode = useStore(state => state.transformMode);
   const meshRef = useRef(null);
   const [hovered, setHovered] = useState(false);
-  
+
   const { id, type, color, texture, transform: { pos, rot, sca } } = entity;
 
   const textureMap = useMemo(() => {
@@ -72,7 +74,6 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
 
   const handleDragChange = (e) => {
     if (!e.value && meshRef.current) {
-      // Stopped dragging, flush transform to store
       const obj = meshRef.current;
       updateEntityTransform(id, {
         pos: [obj.position.x, obj.position.y, obj.position.z],
@@ -83,7 +84,7 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
   };
 
   const getGeometry = () => {
-    switch(type) {
+    switch (type) {
       case 'cube': return <boxGeometry args={[1, 1, 1]} />;
       case 'sphere': return <sphereGeometry args={[0.5, 32, 32]} />;
       case 'pyramid': return <coneGeometry args={[0.5, 1, 4]} />;
@@ -95,12 +96,12 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
       case 'icosahedron': return <icosahedronGeometry args={[0.5]} />;
       case 'dodecahedron': return <dodecahedronGeometry args={[0.5]} />;
       case 'octahedron': return <octahedronGeometry args={[0.5]} />;
-      default: return <boxGeometry args={[1,1,1]} />;
+      default: return <boxGeometry args={[1, 1, 1]} />;
     }
   };
 
   const handleClick = (e) => {
-    if (e.delta > 10) return; // Prevent accidental selection on camera drag
+    if (e.delta > 5) return;
     e.stopPropagation();
     if (isPlaying) onInteract(id);
     else onSelect(id);
@@ -114,14 +115,14 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
         rotation={rot}
         scale={sca}
         onClick={handleClick}
-        onPointerOver={(e) => { 
+        onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
-          if(!isPlaying) document.body.style.cursor = 'pointer'; 
+          if (!isPlaying) document.body.style.cursor = 'pointer';
         }}
-        onPointerOut={(e) => { 
+        onPointerOut={(e) => {
           setHovered(false);
-          if(!isPlaying) document.body.style.cursor = 'auto'; 
+          if (!isPlaying) document.body.style.cursor = 'auto';
         }}
         castShadow
         receiveShadow
@@ -160,13 +161,11 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
 const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform }) => {
   const scriptCache = useRef({});
   const sceneScriptRef = useRef({});
-  
+
   const switchScene = useStore(state => state.switchScene);
   const setSystemFlag = useStore(state => state.setSystemFlag);
-  const getSystemFlag = useStore(state => state.systemVariables.flags);
   const sceneLogic = useStore(state => state.sceneLogic);
 
-  // Build Engine API Object
   const engineAPI = useMemo(() => ({
     getEntities: () => useStore.getState().entities,
     switchScene: (id) => switchScene(id),
@@ -177,15 +176,13 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform
 
   useEffect(() => {
     if (!isPlaying) return;
-    
-    // Compile Scene Logic
+
     if (sceneLogic?.script) {
       try {
         const body = sceneLogic.script.replace(/export function/g, 'function');
         const code = `${body}\nreturn { onSceneStart: typeof onSceneStart !== 'undefined' ? onSceneStart : null, onSceneUpdate: typeof onSceneUpdate !== 'undefined' ? onSceneUpdate : null };`;
         sceneScriptRef.current = new Function(code)();
-        
-        // Execute onSceneStart
+
         if (sceneScriptRef.current.onSceneStart) {
           sceneScriptRef.current.onSceneStart(engineAPI);
         }
@@ -194,7 +191,6 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform
       }
     }
 
-    // Compile Entity Logic
     entities.forEach(ent => {
       if (ent.logic.script) {
         try {
@@ -210,17 +206,15 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform
 
   useFrame((state, delta) => {
     if (!isPlaying) return;
-    
-    // 1. Run Scene Global Logic
+
     if (sceneScriptRef.current.onSceneUpdate) {
-       try {
-         sceneScriptRef.current.onSceneUpdate(engineAPI, inputKeys);
-       } catch (err) {
-         console.error('Scene runtime error', err);
-       }
+      try {
+        sceneScriptRef.current.onSceneUpdate(engineAPI, inputKeys);
+      } catch (err) {
+        console.error('Scene runtime error', err);
+      }
     }
 
-    // 2. Run Entity Logic
     entities.forEach(ent => {
       const onUpdateFn = scriptCache.current[ent.id];
       if (onUpdateFn) {
@@ -228,7 +222,7 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform
           const mutableEnt = { ...ent, transform: { pos: [...ent.transform.pos], rot: [...ent.transform.rot], sca: [...ent.transform.sca] } };
           onUpdateFn(mutableEnt, inputKeys, engineAPI);
           if (mutableEnt.transform.pos[0] !== ent.transform.pos[0] || mutableEnt.transform.pos[1] !== ent.transform.pos[1] || mutableEnt.transform.pos[2] !== ent.transform.pos[2]) {
-             updateEntityTransform(ent.id, { pos: mutableEnt.transform.pos });
+            updateEntityTransform(ent.id, { pos: mutableEnt.transform.pos });
           }
         } catch (err) {
           console.error('Script runtime error on', ent.name, err);
@@ -249,7 +243,7 @@ export const Stage = memo(function Stage() {
   const triggerEvent = useStore(state => state.triggerEvent);
   const inputKeys = useStore(state => state.inputKeys);
   const updateEntityTransform = useStore(state => state.updateEntityTransform);
-  
+
   const pointerDownPos = useRef({ x: 0, y: 0 });
 
   return (
@@ -263,20 +257,42 @@ export const Stage = memo(function Stage() {
           if (!isPlaying && e.type === 'click') {
             const dx = e.clientX - pointerDownPos.current.x;
             const dy = e.clientY - pointerDownPos.current.y;
-            if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+            if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
               setSelectedEntity(null);
             }
           }
         }}
-        gl={{ preserveDrawingBuffer: true, alpha: true }} // Alpha true lets the board background show
+        // CORRECCIÓN RADICAL DE RAYCAST (INTERCEPCIÓN ABSOLUTA)
+        // Ignoramos el offsetX de R3F y usamos coordenadas puras de pantalla vs caja real, 
+        // destrozando la interferencia visual producida por CSS scale.
+        compute={(event, state) => {
+          const gl = state.gl;
+          if (!gl) return;
+          const rect = gl.domElement.getBoundingClientRect();
+
+          // Compatibilidad mouse y touch nativo
+          const clientX = event.clientX !== undefined ? event.clientX : (event.touches && event.touches.length > 0 ? event.touches[0].clientX : 0);
+          const clientY = event.clientY !== undefined ? event.clientY : (event.touches && event.touches.length > 0 ? event.touches[0].clientY : 0);
+
+          // Coordenada exacta restando la posición de la caja real en el navegador
+          const x = clientX - rect.left;
+          const y = clientY - rect.top;
+
+          state.pointer.set(
+            (x / rect.width) * 2 - 1,
+            -(y / rect.height) * 2 + 1
+          );
+          state.raycaster.setFromCamera(state.pointer, state.camera);
+        }}
+        gl={{ preserveDrawingBuffer: true, alpha: true }}
         style={{ background: 'transparent' }}
       >
         <GameLoopManager entities={entities} isPlaying={isPlaying} inputKeys={inputKeys} updateEntityTransform={updateEntityTransform} />
-        
+
         <ambientLight intensity={isPlaying ? 1.0 : 0.4} />
         <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
         <hemisphereLight skyColor="#ffffff" groundColor="#000000" intensity={0.5} />
-        
+
         {!isPlaying && (
           <>
             <Grid infiniteGrid fadeDistance={50} sectionColor="#334155" cellColor="#0f172a" sectionSize={1} cellSize={0.5} />
