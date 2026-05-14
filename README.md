@@ -1,18 +1,45 @@
-# React + Vite
+stars Engine
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+motor de creación híbrido diseñado para la convergencia de arte 2D artesanal y sistemas lógicos 3D. stars engine proporciona la infraestructura técnica necesaria para desarrollar títulos con mundos sistémicos y una dirección artística de alta fidelidad, moviendo el desarrollo web más allá de los motores de juego convencionales.
 
-Currently, two official plugins are available:
+🏗 Arquitectura del Motor
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Gestión de Estado y Persistencia
 
-## React Compiler
+    Systemic Store: Implementado con Zustand, centralizando la lógica de entidades, capas artísticas y variables globales para una reactividad de baja latencia.
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+    Persistence Layer: Gestión de datos mediante IndexedDB (idb-keyval), permitiendo el manejo de escenas pesadas y estados de mundo persistentes sin degradación de rendimiento.
 
-Note: This will impact Vite dev & build performances.
+Viewport y Renderizado
 
-## Expanding the ESLint configuration
+    3D Core: Basado en Three.js y React Three Fiber, integrando un motor de renderizado espacial que gestiona profundidad y transformaciones en tiempo real.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+    Artist Canvas: Sistema de dibujo y animación por fotogramas con soporte nativo para capas, cebolla (onion skin) y modos de mezcla de color.
+
+🎯 Objetivos de Producción (Roadmap)
+
+Para alcanzar estándares de calidad de juegos sistémicos de alta factura, el desarrollo se centra en:
+
+    Hibridación de Cámara: Implementación de un sistema de cámaras que permita alternar dinámicamente entre perspectiva atmosférica y proyección ortográfica. Esto es fundamental para permitir que el artista trabaje con precisión técnica de layout antes de pasar a la composición final.
+
+    Lógica de Entidades Profunda: Evolución de los scripts de componente para soportar ciclos de vida completos (onStart, onUpdate, onDestroy), permitiendo mecánicas de juego complejas (IA, ecosistemas, inventarios).
+
+    Optimización Sistémica: Aprovechamiento del React Compiler y Vite 8 para mantener una tasa de frames estable en entornos con alta densidad de activos y scripts activos.
+
+🛠 Entornos de Trabajo (Workspaces)
+
+    Artist Workspace: Enfoque en la estética y animación. Control de línea de tiempo y jerarquía de capas artísticas.
+
+    Dev Workspace: Enfoque en la estructura y comportamiento. Manipulación de entidades 3D y edición de scripts de lógica mediante el componente integrado de Monaco Editor.
+
+⚙ Stack Técnico
+
+    Core: React 19, Vite 8, Babel (React Compiler).
+
+    Gráficos: Three.js, React Three Fiber, R3F Drei.
+
+    Estado: Zustand.
+
+    Scripting: Monaco Editor (Componente de edición).
+
+    Animación UI: Framer Motion.
