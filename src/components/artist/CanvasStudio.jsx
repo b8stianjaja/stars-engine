@@ -1,19 +1,27 @@
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useStore } from '../../core/store';
+import { useUIStore } from '../../core/stores/uiStore';
+import { useSceneStore } from '../../core/stores/sceneStore';
+import { useArtStore } from '../../core/stores/artStore';
 import { Stage } from '../viewport/Stage';
 
 const ArtLayerCanvas = memo(({ layer }) => {
   const canvasRef = useRef(null);
   const onionRef = useRef(null);
-  const { activeLayerId, studioTools, workspaceMode, director, updateArtLayerFrame, timeline } = useStore(useShallow(state => ({
+
+  // Mapeo dividido por dominios
+  const { activeLayerId, updateArtLayerFrame, timeline } = useArtStore(useShallow(state => ({
     activeLayerId: state.activeLayerId,
-    studioTools: state.studioTools,
-    workspaceMode: state.workspaceMode,
-    director: state.director,
     updateArtLayerFrame: state.updateArtLayerFrame,
     timeline: state.timeline
   })));
+
+  const { studioTools, workspaceMode } = useUIStore(useShallow(state => ({
+    studioTools: state.studioTools,
+    workspaceMode: state.workspaceMode
+  })));
+
+  const director = useSceneStore(state => state.director);
 
   const [ctx, setCtx] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -100,7 +108,8 @@ const ArtLayerCanvas = memo(({ layer }) => {
     e.stopPropagation();
     if (e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId);
 
-    useStore.getState().pushUndoState();
+    // Redirigido a useArtStore
+    useArtStore.getState().pushUndoState();
 
     const pos = getCanvasPos(e);
     setLastPos(pos);
@@ -110,7 +119,7 @@ const ArtLayerCanvas = memo(({ layer }) => {
       const pixel = ctx.getImageData(pos.x, pos.y, 1, 1).data;
       if (pixel[3] > 0) {
         const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(x => x.toString(16).padStart(2, '0')).join('');
-        useStore.getState().setStudioTool({ color: hex, active: 'pencil' });
+        useUIStore.getState().setStudioTool({ color: hex, active: 'pencil' });
       }
       setIsDrawing(false);
       return;
@@ -186,7 +195,7 @@ const ArtLayerCanvas = memo(({ layer }) => {
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
-          useStore.getState().pushUndoState();
+          useArtStore.getState().pushUndoState();
           const blob = items[i].getAsFile();
           const img = new Image();
           img.onload = () => {
@@ -228,10 +237,12 @@ const ArtLayerCanvas = memo(({ layer }) => {
 
 const EntitySpriteCanvas = memo(({ entity }) => {
   const canvasRef = useRef(null);
-  const { updateEntityData, studioTools, director, workspaceMode } = useStore(useShallow(state => ({
-    updateEntityData: state.updateEntityData,
+
+  const updateEntityData = useSceneStore(state => state.updateEntityData);
+  const director = useSceneStore(state => state.director);
+
+  const { studioTools, workspaceMode } = useUIStore(useShallow(state => ({
     studioTools: state.studioTools,
-    director: state.director,
     workspaceMode: state.workspaceMode
   })));
 
@@ -374,30 +385,37 @@ const EntitySpriteCanvas = memo(({ entity }) => {
 });
 
 export function CanvasStudio() {
-  const { studioView, setStudioView, artLayers, studioTools, isPlaying, workspaceMode, director, timeline, setTimeline, undoArtLayer, setStudioTool } = useStore(useShallow(state => ({
+  const { studioView, setStudioView, studioTools, workspaceMode, setStudioTool } = useUIStore(useShallow(state => ({
     studioView: state.studioView,
     setStudioView: state.setStudioView,
-    artLayers: state.artLayers,
     studioTools: state.studioTools,
-    isPlaying: state.isPlaying,
     workspaceMode: state.workspaceMode,
-    director: state.director,
-    timeline: state.timeline,
-    setTimeline: state.setTimeline,
-    undoArtLayer: state.undoArtLayer,
     setStudioTool: state.setStudioTool
   })));
+
+  const { isPlaying, director } = useSceneStore(useShallow(state => ({
+    isPlaying: state.isPlaying,
+    director: state.director
+  })));
+
+  const { artLayers, timeline, setTimeline, undoArtLayer } = useArtStore(useShallow(state => ({
+    artLayers: state.artLayers,
+    timeline: state.timeline,
+    setTimeline: state.setTimeline,
+    undoArtLayer: state.undoArtLayer
+  })));
+
   const [isPanning, setIsPanning] = useState(false);
   const [spacePressed, setSpacePressed] = useState(false);
   const startPanRef = useRef({ x: 0, y: 0 });
-  const entities = useStore(state => state.entities);
-  const selectedEntityId = useStore(state => state.selectedEntityId);
+
+  const entities = useSceneStore(state => state.entities);
+  const selectedEntityId = useSceneStore(state => state.selectedEntityId);
   const selectedEntity = entities.find(e => e.id === selectedEntityId);
 
   const viewportRef = useRef(null);
   const playIntervalRef = useRef(null);
 
-  // FIX ZOOM 1: Centrado asumiendo Transform-Origin 0,0
   useEffect(() => {
     if (viewportRef.current) {
       const rect = viewportRef.current.getBoundingClientRect();
@@ -415,7 +433,7 @@ export function CanvasStudio() {
   useEffect(() => {
     if (timeline.isPlaying) {
       playIntervalRef.current = setInterval(() => {
-        setTimeline({ currentFrame: (useStore.getState().timeline.currentFrame + 1) % timeline.totalFrames });
+        setTimeline({ currentFrame: (useArtStore.getState().timeline.currentFrame + 1) % timeline.totalFrames });
       }, 1000 / timeline.fps);
     } else {
       clearInterval(playIntervalRef.current);
@@ -423,20 +441,18 @@ export function CanvasStudio() {
     return () => clearInterval(playIntervalRef.current);
   }, [timeline.isPlaying, timeline.fps, timeline.totalFrames, setTimeline]);
 
-  // FIX ZOOM 2: Bloqueo Extremo de Gestos Nativos de OS (Mac/Safari/Touch)
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
     const preventDefault = (e) => e.preventDefault();
 
-    // Bloquear eventos de gesto nativos (trackpads Mac/Safari)
     viewport.addEventListener('gesturestart', preventDefault);
     viewport.addEventListener('gesturechange', preventDefault);
     viewport.addEventListener('gestureend', preventDefault);
 
     const preventNativeZoom = (e) => {
-      if (e.ctrlKey || e.metaKey || spacePressed || useStore.getState().studioTools.active === 'pan') {
+      if (e.ctrlKey || e.metaKey || spacePressed || useUIStore.getState().studioTools.active === 'pan') {
         e.preventDefault();
       }
     };
@@ -458,12 +474,12 @@ export function CanvasStudio() {
 
       if (e.ctrlKey || e.metaKey) {
         if (e.code === 'KeyZ') { e.preventDefault(); undoArtLayer(); }
-        if (e.code === 'KeyY') { e.preventDefault(); useStore.getState().redoArtLayer(); }
+        if (e.code === 'KeyY') { e.preventDefault(); useArtStore.getState().redoArtLayer(); }
       } else {
         if (e.code === 'KeyB') setStudioTool({ active: 'pencil' });
         if (e.code === 'KeyE') setStudioTool({ active: 'eraser' });
-        if (e.code === 'BracketLeft') setStudioTool({ size: Math.max(1, useStore.getState().studioTools.size - 2) });
-        if (e.code === 'BracketRight') setStudioTool({ size: Math.min(100, useStore.getState().studioTools.size + 2) });
+        if (e.code === 'BracketLeft') setStudioTool({ size: Math.max(1, useUIStore.getState().studioTools.size - 2) });
+        if (e.code === 'BracketRight') setStudioTool({ size: Math.min(100, useUIStore.getState().studioTools.size + 2) });
       }
     };
     const handleKeyUp = (e) => { if (e.code === 'Space') setSpacePressed(false); };
@@ -473,7 +489,6 @@ export function CanvasStudio() {
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, [undoArtLayer, setStudioTool]);
 
-  // FIX ZOOM 3: Matemática ajustada para transform-origin: '0 0'
   const handleWheel = (e) => {
     if (e.ctrlKey || e.metaKey || studioTools.active === 'pan' || spacePressed) {
       const zoomSensitivity = 0.003;
@@ -486,7 +501,6 @@ export function CanvasStudio() {
       const cursorX = e.clientX - rect.left;
       const cursorY = e.clientY - rect.top;
 
-      // Distancia matemática pura del ratón hacia la esquina superior izquierda del lienzo
       const dx = cursorX - studioView.x;
       const dy = cursorY - studioView.y;
 
@@ -536,7 +550,7 @@ export function CanvasStudio() {
         style={{
           width: '1920px',
           height: '1080px',
-          transformOrigin: '0 0', // FIX RADICAL: El pivote debe ser top-left para que la matemática funcione
+          transformOrigin: '0 0',
           transform: `translate(${studioView.x}px, ${studioView.y}px) scale(${studioView.zoom})`
         }}
       >

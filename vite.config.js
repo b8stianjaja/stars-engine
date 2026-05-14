@@ -1,11 +1,19 @@
-import { defineConfig } from 'vite'
-import react, { reactCompilerPreset } from '@vitejs/plugin-react'
-import babel from '@rolldown/plugin-babel'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] })
-  ],
-})
+  plugins: [react()],
+  // Prevent Vite from obscuring Rust errors
+  clearScreen: false,
+  server: {
+    // Tauri expects a fixed port, fail if that port is not available
+    strictPort: true,
+    port: 5173,
+  },
+  // Ensure the build targets modern web standards that Tauri's webview supports
+  build: {
+    target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
+    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+    sourcemap: !!process.env.TAURI_DEBUG,
+  },
+});

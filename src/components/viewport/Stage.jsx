@@ -2,13 +2,13 @@ import React, { useRef, memo, useEffect, useState, useMemo } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls, TransformControls, Grid, Edges, GizmoHelper, GizmoViewport } from '@react-three/drei';
-import { useStore } from '../../core/store';
+import { useSceneStore } from '../../core/stores/sceneStore';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 const CameraController = ({ isCameraLocked }) => {
   const { camera, gl } = useThree();
-  const updateCamera = useStore(state => state.updateCamera);
-  const activeCamera = useStore(state => state.director.activeCamera);
+  const updateCamera = useSceneStore(state => state.updateCamera);
+  const activeCamera = useSceneStore(state => state.director.activeCamera);
   const controlsRef = useRef(null);
 
   useEffect(() => {
@@ -52,13 +52,23 @@ const CameraController = ({ isCameraLocked }) => {
   );
 };
 
-const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onInteract }) => {
-  const updateEntityTransform = useStore(state => state.updateEntityTransform);
-  const transformMode = useStore(state => state.transformMode);
+const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onInteract, meshRegistry }) => {
+  const updateEntityTransform = useSceneStore(state => state.updateEntityTransform);
+  const transformMode = useSceneStore(state => state.transformMode);
   const meshRef = useRef(null);
   const [hovered, setHovered] = useState(false);
 
   const { id, type, color, texture, transform: { pos, rot, sca } } = entity;
+
+  // Registrar el mesh en el registro global para que el GameLoop lo manipule directamente
+  useEffect(() => {
+    if (meshRef.current && meshRegistry) {
+      meshRegistry.current.set(id, meshRef.current);
+    }
+    return () => {
+      if (meshRegistry) meshRegistry.current.delete(id);
+    };
+  }, [id, meshRegistry]);
 
   const textureMap = useMemo(() => {
     if (!texture) return null;
@@ -73,6 +83,7 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
   }, [texture]);
 
   const handleDragChange = (e) => {
+    // Al terminar de arrastrar en el editor, guardamos en la base de datos de forma eficiente
     if (!e.value && meshRef.current) {
       const obj = meshRef.current;
       updateEntityTransform(id, {
@@ -158,20 +169,20 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
   );
 });
 
-const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform }) => {
+const GameLoopManager = ({ entities, isPlaying, inputKeys, meshRegistry }) => {
   const scriptCache = useRef({});
   const sceneScriptRef = useRef({});
 
-  const switchScene = useStore(state => state.switchScene);
-  const setSystemFlag = useStore(state => state.setSystemFlag);
-  const sceneLogic = useStore(state => state.sceneLogic);
+  const switchScene = useSceneStore(state => state.switchScene);
+  const setSystemFlag = useSceneStore(state => state.setSystemFlag);
+  const sceneLogic = useSceneStore(state => state.sceneLogic);
 
   const engineAPI = useMemo(() => ({
-    getEntities: () => useStore.getState().entities,
+    getEntities: () => useSceneStore.getState().entities,
     switchScene: (id) => switchScene(id),
     setFlag: (key, val) => setSystemFlag(key, val),
-    getFlag: (key) => useStore.getState().systemVariables.flags[key],
-    triggerEvent: (id, type) => useStore.getState().triggerEvent(id, type)
+    getFlag: (key) => useSceneStore.getState().systemVariables.flags[key],
+    triggerEvent: (id, type) => useSceneStore.getState().triggerEvent(id, type)
   }), [switchScene, setSystemFlag]);
 
   useEffect(() => {
@@ -219,11 +230,28 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform
       const onUpdateFn = scriptCache.current[ent.id];
       if (onUpdateFn) {
         try {
-          const mutableEnt = { ...ent, transform: { pos: [...ent.transform.pos], rot: [...ent.transform.rot], sca: [...ent.transform.sca] } };
+          // Extraemos la malla directa de Three.js
+          const mesh = meshRegistry.current.get(ent.id);
+          if (!mesh) return;
+
+          // Creamos una entidad temporal con las posiciones reales del mundo en este fotograma
+          const mutableEnt = {
+            ...ent,
+            transform: {
+              pos: [mesh.position.x, mesh.position.y, mesh.position.z],
+              rot: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+              sca: [mesh.scale.x, mesh.scale.y, mesh.scale.z]
+            }
+          };
+
+          // Ejecutamos el script del usuario
           onUpdateFn(mutableEnt, inputKeys, engineAPI);
-          if (mutableEnt.transform.pos[0] !== ent.transform.pos[0] || mutableEnt.transform.pos[1] !== ent.transform.pos[1] || mutableEnt.transform.pos[2] !== ent.transform.pos[2]) {
-            updateEntityTransform(ent.id, { pos: mutableEnt.transform.pos });
-          }
+
+          // ¡MAGIA! Escribimos directamente a la tarjeta gráfica. React no se entera y ahorramos 100% de CPU.
+          mesh.position.set(...mutableEnt.transform.pos);
+          mesh.rotation.set(...mutableEnt.transform.rot);
+          mesh.scale.set(...mutableEnt.transform.sca);
+
         } catch (err) {
           console.error('Script runtime error on', ent.name, err);
         }
@@ -235,20 +263,22 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, updateEntityTransform
 };
 
 export const Stage = memo(function Stage() {
-  const entities = useStore(state => state.entities);
-  const isPlaying = useStore(state => state.isPlaying);
-  const director = useStore(state => state.director);
-  const selectedEntityId = useStore(state => state.selectedEntityId);
-  const setSelectedEntity = useStore(state => state.setSelectedEntity);
-  const triggerEvent = useStore(state => state.triggerEvent);
-  const inputKeys = useStore(state => state.inputKeys);
-  const updateEntityTransform = useStore(state => state.updateEntityTransform);
+  const entities = useSceneStore(state => state.entities);
+  const isPlaying = useSceneStore(state => state.isPlaying);
+  const director = useSceneStore(state => state.director);
+  const selectedEntityId = useSceneStore(state => state.selectedEntityId);
+  const setSelectedEntity = useSceneStore(state => state.setSelectedEntity);
+  const triggerEvent = useSceneStore(state => state.triggerEvent);
+  const inputKeys = useSceneStore(state => state.inputKeys);
 
+  // Registro maestro para comunicar React con el GameLoop directo
+  const meshRegistry = useRef(new Map());
   const pointerDownPos = useRef({ x: 0, y: 0 });
 
   return (
     <ErrorBoundary>
       <Canvas
+        shadows
         camera={{ position: director.activeCamera.position, fov: director.activeCamera.fov }}
         onPointerDown={(e) => {
           pointerDownPos.current = { x: e.clientX, y: e.clientY };
@@ -262,32 +292,30 @@ export const Stage = memo(function Stage() {
             }
           }
         }}
-        // CORRECCIÓN RADICAL DE RAYCAST (INTERCEPCIÓN ABSOLUTA)
-        // Ignoramos el offsetX de R3F y usamos coordenadas puras de pantalla vs caja real, 
-        // destrozando la interferencia visual producida por CSS scale.
-        compute={(event, state) => {
-          const gl = state.gl;
-          if (!gl) return;
-          const rect = gl.domElement.getBoundingClientRect();
-
-          // Compatibilidad mouse y touch nativo
-          const clientX = event.clientX !== undefined ? event.clientX : (event.touches && event.touches.length > 0 ? event.touches[0].clientX : 0);
-          const clientY = event.clientY !== undefined ? event.clientY : (event.touches && event.touches.length > 0 ? event.touches[0].clientY : 0);
-
-          // Coordenada exacta restando la posición de la caja real en el navegador
-          const x = clientX - rect.left;
-          const y = clientY - rect.top;
-
-          state.pointer.set(
-            (x / rect.width) * 2 - 1,
-            -(y / rect.height) * 2 + 1
-          );
-          state.raycaster.setFromCamera(state.pointer, state.camera);
-        }}
+        // CORRECCIÓN: Usamos un objeto de eventos para evitar que 'compute' llegue al div
+        events={(store) => ({
+          ...store.events,
+          compute: (event, state) => {
+            const gl = state.gl;
+            if (!gl) return;
+            const rect = gl.domElement.getBoundingClientRect();
+            const clientX = event.clientX !== undefined ? event.clientX : (event.touches && event.touches.length > 0 ? event.touches[0].clientX : 0);
+            const clientY = event.clientY !== undefined ? event.clientY : (event.touches && event.touches.length > 0 ? event.touches[0].clientY : 0);
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+            state.pointer.set((x / rect.width) * 2 - 1, -(y / rect.height) * 2 + 1);
+            state.raycaster.setFromCamera(state.pointer, state.camera);
+          }
+        })}
         gl={{ preserveDrawingBuffer: true, alpha: true }}
         style={{ background: 'transparent' }}
       >
-        <GameLoopManager entities={entities} isPlaying={isPlaying} inputKeys={inputKeys} updateEntityTransform={updateEntityTransform} />
+        <GameLoopManager
+          entities={entities}
+          isPlaying={isPlaying}
+          inputKeys={inputKeys}
+          meshRegistry={meshRegistry}
+        />
 
         <ambientLight intensity={isPlaying ? 1.0 : 0.4} />
         <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
@@ -312,6 +340,7 @@ export const Stage = memo(function Stage() {
               isSelected={selectedEntityId === entity.id}
               onSelect={setSelectedEntity}
               onInteract={(id) => triggerEvent(id, 'interact')}
+              meshRegistry={meshRegistry}
             />
           ))}
         </group>
