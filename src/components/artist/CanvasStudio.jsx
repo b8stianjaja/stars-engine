@@ -27,6 +27,9 @@ const ArtLayerCanvas = memo(({ layer }) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [lastPos, setLastPos] = useState(null);
 
+  // Task 3: Selection Tool State
+  const [selectionRect, setSelectionRect] = useState(null);
+
   const isEditable = workspaceMode === 'artist' && director.isCameraLocked && activeLayerId === layer.id && studioTools.active !== 'pan';
 
   const safeFrames = layer.frames || { 0: layer.dataUrl };
@@ -115,6 +118,12 @@ const ArtLayerCanvas = memo(({ layer }) => {
     setLastPos(pos);
     setIsDrawing(true);
 
+    // Selection Tool Initialization
+    if (studioTools.active === 'selection') {
+      setSelectionRect({ x: pos.x, y: pos.y, w: 0, h: 0 });
+      return;
+    }
+
     if (studioTools.active === 'pipette') {
       const pixel = ctx.getImageData(pos.x, pos.y, 1, 1).data;
       if (pixel[3] > 0) {
@@ -158,6 +167,17 @@ const ArtLayerCanvas = memo(({ layer }) => {
     e.preventDefault();
 
     const pos = getCanvasPos(e);
+
+    // Task 3: Selection Marquee Update
+    if (studioTools.active === 'selection') {
+      setSelectionRect(prev => ({
+        ...prev,
+        w: pos.x - prev.x,
+        h: pos.y - prev.y
+      }));
+      return;
+    }
+
     const pressure = e.pointerType === 'pen' ? e.pressure : 1;
     const dynamicSize = studioTools.size * (0.2 + (pressure * 0.8));
 
@@ -183,6 +203,11 @@ const ArtLayerCanvas = memo(({ layer }) => {
   const stopDrawing = (e) => {
     if (!isDrawing || !isEditable) return;
     e.stopPropagation();
+
+    if (studioTools.active === 'selection' && selectionRect) {
+      useUIStore.getState().setStudioTool({ selectionActive: true });
+    }
+
     setIsDrawing(false);
     setLastPos(null);
     if (canvasRef.current) updateArtLayerFrame(layer.id, timeline.currentFrame, canvasRef.current.toDataURL('image/png'));
@@ -216,8 +241,16 @@ const ArtLayerCanvas = memo(({ layer }) => {
     return () => document.removeEventListener('paste', handlePaste);
   }, [isEditable, ctx, layer.id, timeline.currentFrame, updateArtLayerFrame]);
 
+  // Handle Clearing Selection on tool change
+  useEffect(() => {
+    if (studioTools.active !== 'selection') {
+      setSelectionRect(null);
+      useUIStore.getState().setStudioTool({ selectionActive: false });
+    }
+  }, [studioTools.active]);
+
   return (
-    <>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {timeline.onionSkin && prevFrameData && (
         <canvas ref={onionRef} className="board-layer" style={{ zIndex: layer.zIndex - 0.5, display: layer.visible ? 'block' : 'none', pointerEvents: 'none', opacity: 0.5 }} />
       )}
@@ -231,7 +264,24 @@ const ArtLayerCanvas = memo(({ layer }) => {
         onPointerLeave={stopDrawing}
         onPointerCancel={stopDrawing}
       />
-    </>
+
+      {/* Visual Marquee Overlay */}
+      {selectionRect && studioTools.active === 'selection' && (
+        <div style={{
+          position: 'absolute',
+          zIndex: layer.zIndex + 0.1,
+          border: '1px dashed #fff',
+          background: 'rgba(255,255,255,0.1)',
+          pointerEvents: 'none',
+          left: Math.min(selectionRect.x, selectionRect.x + selectionRect.w),
+          top: Math.min(selectionRect.y, selectionRect.y + selectionRect.h),
+          width: Math.abs(selectionRect.w),
+          height: Math.abs(selectionRect.h),
+          boxShadow: '0 0 0 10000px rgba(0,0,0,0.2)', // Dim unselected areas
+          mixBlendMode: 'difference'
+        }} />
+      )}
+    </div>
   );
 });
 
@@ -478,6 +528,7 @@ export function CanvasStudio() {
       } else {
         if (e.code === 'KeyB') setStudioTool({ active: 'pencil' });
         if (e.code === 'KeyE') setStudioTool({ active: 'eraser' });
+        if (e.code === 'KeyM') setStudioTool({ active: 'selection' }); // New shortcut
         if (e.code === 'BracketLeft') setStudioTool({ size: Math.max(1, useUIStore.getState().studioTools.size - 2) });
         if (e.code === 'BracketRight') setStudioTool({ size: Math.min(100, useUIStore.getState().studioTools.size + 2) });
       }

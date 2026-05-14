@@ -12,7 +12,8 @@ import {
   PenTool, Eraser, Move, ChevronUp, ChevronDown, Monitor, Download, Copy, Folder,
   Film, Settings, SkipBack, SkipForward, Clock,
   Pipette, PaintBucket, Undo2, Redo2, ZoomIn, ZoomOut,
-  FlipHorizontal, Grid, Sun, Moon
+  FlipHorizontal, Grid, Sun, Moon,
+  BoxSelect // Added for selection tool
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import Editor from '@monaco-editor/react';
@@ -129,6 +130,8 @@ const ArtistPanel = ({ children }) => {
         <IconButton icon={Move} label="Pan (Space+Drag)" active={studioTools.active === 'pan'} onClick={() => setStudioTool({ active: 'pan' })} />
         <IconButton icon={PenTool} label="Brush (B)" active={studioTools.active === 'pencil'} onClick={() => setStudioTool({ active: 'pencil' })} />
         <IconButton icon={Eraser} label="Eraser (E)" active={studioTools.active === 'eraser'} onClick={() => setStudioTool({ active: 'eraser' })} />
+        {/* Selection Tool Button */}
+        <IconButton icon={BoxSelect} label="Selection (M)" active={studioTools.active === 'selection'} onClick={() => setStudioTool({ active: 'selection' })} />
         <IconButton icon={PaintBucket} label="Fill Layer" active={studioTools.active === 'bucket'} onClick={() => setStudioTool({ active: 'bucket' })} />
         <IconButton icon={Pipette} label="Eyedropper (I)" active={studioTools.active === 'pipette'} onClick={() => setStudioTool({ active: 'pipette' })} />
 

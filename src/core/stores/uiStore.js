@@ -12,12 +12,13 @@ export const useUIStore = create(
             studioView: { x: 0, y: 0, zoom: 0.5, showGreybox: true },
 
             studioTools: {
-                active: 'pencil', // 'pencil' | 'eraser' | 'pan' | 'bucket' | 'pipette'
-                color: '#f8fafc',
+                active: 'pencil', // Options: 'pencil', 'eraser', 'bucket', 'pipette', 'selection'
+                color: '#00ffcc',
                 size: 5,
                 opacity: 1,
                 symmetryX: false,
-                showGrid2D: false
+                showGrid2D: false,
+                selectionActive: false, // New: Tracks if a selection is currently active
             },
 
             notifications: [],
