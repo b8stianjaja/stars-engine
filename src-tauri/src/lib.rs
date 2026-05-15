@@ -1,7 +1,7 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Inicialización de los plugins necesarios para el motor
+        // Inicialización de los plugins necesarios para el motor (Acceso a Disco y Diálogos)
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {

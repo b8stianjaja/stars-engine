@@ -1,23 +1,29 @@
 import { io } from 'socket.io-client';
 import { useSystemicStore } from '../engine.store';
 
-/**
- * Sync Client: Gestiona el Broadcast de Cambios[cite: 29].
- */
+// Mantenemos una referencia global al socket para envíos desde los componentes
+let globalSocket = null;
+
 export const initSyncClient = (worker) => {
-    const socket = io('http://localhost:3000'); // Servidor local integrado [cite: 23]
+    globalSocket = io('http://localhost:3001');
     const applyPatch = useSystemicStore.getState().applyPatch;
 
-    socket.on('SYNC_ASSET', (data) => {
-        console.log("[LHC]: Hot-Swapping de textura detectado [cite: 30]");
-        // Actualizamos el hash en el Store para que el Viewport reaccione
+    globalSocket.on('SYNC_ASSET', (data) => {
         applyPatch({ [data.entityId]: { textureHash: data.newHash } });
     });
 
-    socket.on('SYNC_SCRIPT', (data) => {
-        // Envía el código al Logic Worker para su reinyección en caliente 
+    globalSocket.on('SYNC_SCRIPT', (data) => {
         worker.postMessage({ type: 'INJECT_SCRIPT', payload: data.code });
     });
 
-    return socket;
+    return globalSocket;
+};
+
+// Utilidad para que el Actor o el Editor puedan emitir eventos a la LAN
+export const emitSyncEvent = (eventName, payload) => {
+    if (globalSocket && globalSocket.connected) {
+        globalSocket.emit(eventName, payload);
+    } else {
+        console.warn(`[Sync Client]: Intento de emitir '${eventName}' sin conexión.`);
+    }
 };

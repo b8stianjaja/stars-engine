@@ -1,48 +1,62 @@
-import { useState, Suspense } from 'react';
+import { useRef, useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { PerspectiveCamera, OrthographicCamera, OrbitControls, ContactShadows } from '@react-three/drei';
+import { PerspectiveCamera, OrbitControls, ContactShadows } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import { useSystemicStore } from '../core/engine.store';
 import { Actor } from './Actor';
 
-/**
- * Viewport corregido. Se elimina la carga externa de HDR que causaba el error de stream
- * debido a las políticas de seguridad de hilos compartidos.
- */
-export function Viewport({ sharedBuffer }) {
-    const entityIds = useSystemicStore(
-        useShallow((state) => Object.keys(state.entities))
-    );
+function CameraController() {
+    const { camera } = useThree();
+    const controlsRef = useRef();
 
-    const [cameraMode] = useState('perspective');
+    const activeViewId = useSystemicStore(state => state.workspace.activeViewId);
+    const cameraViews = useSystemicStore(state => state.workspace.cameraViews);
+
+    useEffect(() => {
+        if (!controlsRef.current) return;
+        const targetView = cameraViews[activeViewId];
+        if (!targetView) return;
+
+        if (activeViewId === 'free') {
+            controlsRef.current.enabled = true;
+        } else {
+            // El lente se congela en las coordenadas de composición exactas del artista
+            controlsRef.current.enabled = false;
+            camera.position.fromArray(targetView.position);
+            controlsRef.current.target.fromArray(targetView.target);
+            camera.fov = targetView.fov || 40;
+            camera.updateProjectionMatrix();
+            controlsRef.current.update();
+        }
+    }, [activeViewId, cameraViews, camera]);
+
+    return <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.05} />;
+}
+
+export function Viewport({ sharedBuffer }) {
+    const entityIds = useSystemicStore(useShallow(state => Object.keys(state.entities)));
+    const activeViewId = useSystemicStore(state => state.workspace.activeViewId);
+    const cameraViews = useSystemicStore(state => state.workspace.cameraViews);
+
+    const currentView = cameraViews[activeViewId] || cameraViews['free'];
 
     return (
-        <Suspense fallback={null}>
-            {/* Cámaras según especificación [cite: 19] */}
-            {cameraMode === 'perspective' ? (
-                <PerspectiveCamera makeDefault position={[8, 8, 8]} fov={45} />
-            ) : (
-                <OrthographicCamera makeDefault position={[0, 10, 0]} zoom={50} />
-            )}
+        <>
+            <PerspectiveCamera makeDefault position={currentView.position} fov={currentView.fov || 40} />
+            <CameraController />
 
-            <OrbitControls makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 1.75} />
+            <color attach="background" args={['#07070a']} />
+            <ambientLight intensity={0.5} />
+            <directionalLight position={[10, 15, 10]} intensity={1.5} castShadow />
 
-            {/* Iluminación Local (Evita errores de ReadableStream externos) */}
-            <color attach="background" args={['#050505']} />
-            <ambientLight intensity={0.4} />
-            <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
-            <pointLight position={[-10, -10, -10]} intensity={1} />
-
-            {/* Renderizado de Actores con suscripción transitoria [cite: 16] */}
-            {entityIds.map((id, index) => (
-                <Actor
-                    key={id}
-                    index={index}
-                    buffer={sharedBuffer}
-                />
-            ))}
+            <group>
+                {entityIds.map((id, index) => (
+                    <Actor key={id} id={id} index={index} buffer={sharedBuffer} />
+                ))}
+            </group>
 
             <ContactShadows position={[0, -0.01, 0]} opacity={0.4} scale={20} blur={2} far={4.5} />
-            <gridHelper args={[20, 20, 0x222222, 0x111111]} />
-        </Suspense>
+            <gridHelper args={[20, 20, 0x222230, 0x111116]} />
+        </>
     );
 }
