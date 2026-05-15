@@ -7,7 +7,11 @@
   ],
   "permissions": [
     "core:default",
-    "dialog:default",
-    "fs:default"
+    "fs:allow-read-recursive",
+    "fs:allow-write-recursive",
+    "dialog:allow-open",
+    "shell:allow-open",
+    "fs:default",
+    "dialog:default"
   ]
 }

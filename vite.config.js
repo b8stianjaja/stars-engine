@@ -1,30 +1,13 @@
-// vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const ReactCompilerConfig = { target: '19' };
-
 export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [
-          ["babel-plugin-react-compiler", ReactCompilerConfig],
-        ],
-      },
-    }),
-  ],
-  clearScreen: false,
+  plugins: [react()],
   server: {
-    strictPort: true,
-    port: 5173,
-    hmr: {
-      overlay: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
-  build: {
-    target: process.env.TAURI_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
-    sourcemap: !!process.env.TAURI_DEBUG,
-  },
+  worker: { format: 'es' }
 });

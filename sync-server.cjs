@@ -1,22 +1,21 @@
-// sync-server.cjs
 const { Server } = require("socket.io");
+const fs = require("fs");
+const path = require("path");
 
-const io = new Server(3001, {
-    cors: { origin: "*" } // Permite conexión de cualquier IP en la LAN
-});
+const io = new Server(3001, { cors: { origin: "*" } });
+const drawingsDir = path.join(__dirname, "public", "drawings");
+if (!fs.existsSync(drawingsDir)) fs.mkdirSync(drawingsDir, { recursive: true });
 
 io.on("connection", (socket) => {
-    console.log("PC Conectado:", socket.id);
+    socket.on("ARTIST_STROKE", (data) => socket.broadcast.emit("REMOTE_STROKE", data));
+    socket.on("ENGINE_UPDATE", (data) => socket.broadcast.emit("REMOTE_ENGINE_UPDATE", data));
 
-    // Reenviar trazos de dibujo del Artista al Programador
-    socket.on("ARTIST_STROKE", (data) => {
-        socket.broadcast.emit("REMOTE_STROKE", data);
-    });
-
-    // Reenviar cambios de lógica/entidades del Programador al Artista
-    socket.on("ENGINE_UPDATE", (data) => {
-        socket.broadcast.emit("REMOTE_ENGINE_UPDATE", data);
+    socket.on("SAVE_CANVAS", (data) => {
+        const { entityId, imageData } = data;
+        const base64Data = imageData.replace(/^data:image\/png;base64,/, "");
+        fs.writeFile(path.join(drawingsDir, `${entityId}.png`), base64Data, "base64", (err) => {
+            if (!err) console.log(`💾 Persistido: ${entityId}.png`);
+        });
     });
 });
-
-console.log("Stars Engine Sync Bridge corriendo en puerto 3001");
+console.log("🚀 Bridge LAN activo en puerto 3001");

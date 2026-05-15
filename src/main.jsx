@@ -1,22 +1,32 @@
-// src/main.jsx
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App'; // Corregido: App está en la misma carpeta que main.jsx
-import './index.css';
+/**
+ * STARS ENGINE V1.0 - Punto de Entrada (Main Entry Point)
+ * * Este archivo es el responsable exclusivo de inicializar el runtime de React 19
+ * y montar la raíz de la aplicación. Para mantener la modularidad, el Canvas 
+ * y la lógica de simulación han sido segregados a sus propios componentes.
+ */
 
-// Importación del gestor de red para la sincronización en tiempo real entre los 2 PCs
-import { network } from './starsengine/core/network/NetworkManager';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
+
+const rootElement = document.getElementById('root');
 
 /**
- * CONEXIÓN LAN: 
- * Asegúrate de que esta IP sea la de tu PC Principal (donde corre sync-server.cjs).
- * Si estás en el PC del Artista, esta IP debe apuntar al PC del Programador.
+ * Validación del elemento raíz.
+ * Garantiza que el entorno de ejecución sea correcto antes de iniciar el motor.
  */
-network.connect('192.168.0.18');
+if (!rootElement) {
+    throw new Error(
+        '[Stars Engine Kernel]: Error fatal de inicialización. ' +
+        'No se encontró el elemento raíz "root" en el DOM.'
+    );
+}
 
-// Renderizado del motor con StrictMode para depuración de efectos secundarios
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+// Inicialización del root de React 19
+const root = createRoot(rootElement);
+
+root.render(
+    <StrictMode>
+        <App />
+    </StrictMode>
 );
