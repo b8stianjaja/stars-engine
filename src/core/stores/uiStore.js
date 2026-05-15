@@ -5,7 +5,6 @@ import { get as idbGet, set as idbSet } from 'idb-keyval';
 export const useUIStore = create(
     persist(
         (set) => ({
-            // --- ESTADO LOCAL DE LA INTERFAZ ---
             workspaceMode: 'artist', // 'artist' | 'dev'
             uiTheme: 'light', // 'light' | 'dark'
 
@@ -18,12 +17,12 @@ export const useUIStore = create(
                 opacity: 1,
                 symmetryX: false,
                 showGrid2D: false,
-                selectionActive: false, // New: Tracks if a selection is currently active
+                selectionActive: false,
+                isEditingSprite: false, // NEW: Tracks if the pixel editor is intentionally open
             },
 
             notifications: [],
 
-            // --- ACCIONES ---
             toggleWorkspaceMode: () => set(state => ({
                 workspaceMode: state.workspaceMode === 'artist' ? 'dev' : 'artist'
             })),
@@ -41,12 +40,11 @@ export const useUIStore = create(
             })),
 
             addNotification: (msg) => set(state => ({
-                // Usamos crypto.randomUUID() nativo del navegador en lugar de la librería uuid
                 notifications: [{ id: crypto.randomUUID(), msg, time: Date.now() }, ...state.notifications].slice(0, 5)
             }))
         }),
         {
-            name: 'stars-engine-ui-v1', // Nueva llave independiente en IndexedDB
+            name: 'stars-engine-ui-v1',
             storage: createJSONStorage(() => ({
                 getItem: async (name) => {
                     const val = await idbGet(name);
@@ -57,8 +55,6 @@ export const useUIStore = create(
                 },
                 removeItem: async (name) => { }
             })),
-            // CRÍTICO: Solo persistimos lo que realmente importa al recargar la página.
-            // No guardamos el `studioView` (zoom/pan) para evitar re-escrituras constantes en la base de datos al mover el mouse.
             partialize: (state) => ({
                 workspaceMode: state.workspaceMode,
                 uiTheme: state.uiTheme,

@@ -60,7 +60,6 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
 
   const { id, type, color, texture, transform: { pos, rot, sca } } = entity;
 
-  // Registrar el mesh en el registro global para que el GameLoop lo manipule directamente
   useEffect(() => {
     if (meshRef.current && meshRegistry) {
       meshRegistry.current.set(id, meshRef.current);
@@ -82,8 +81,14 @@ const EntityRenderer = memo(({ entity, isPlaying, isSelected, onSelect, onIntera
     return tex;
   }, [texture]);
 
+  // FIX: Dispose of textures when the entity or texture changes
+  useEffect(() => {
+    return () => {
+      if (textureMap) textureMap.dispose();
+    };
+  }, [textureMap]);
+
   const handleDragChange = (e) => {
-    // Al terminar de arrastrar en el editor, guardamos en la base de datos de forma eficiente
     if (!e.value && meshRef.current) {
       const obj = meshRef.current;
       updateEntityTransform(id, {
@@ -230,11 +235,9 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, meshRegistry }) => {
       const onUpdateFn = scriptCache.current[ent.id];
       if (onUpdateFn) {
         try {
-          // Extraemos la malla directa de Three.js
           const mesh = meshRegistry.current.get(ent.id);
           if (!mesh) return;
 
-          // Creamos una entidad temporal con las posiciones reales del mundo en este fotograma
           const mutableEnt = {
             ...ent,
             transform: {
@@ -244,10 +247,8 @@ const GameLoopManager = ({ entities, isPlaying, inputKeys, meshRegistry }) => {
             }
           };
 
-          // Ejecutamos el script del usuario
           onUpdateFn(mutableEnt, inputKeys, engineAPI);
 
-          // ¡MAGIA! Escribimos directamente a la tarjeta gráfica. React no se entera y ahorramos 100% de CPU.
           mesh.position.set(...mutableEnt.transform.pos);
           mesh.rotation.set(...mutableEnt.transform.rot);
           mesh.scale.set(...mutableEnt.transform.sca);
@@ -271,7 +272,6 @@ export const Stage = memo(function Stage() {
   const triggerEvent = useSceneStore(state => state.triggerEvent);
   const inputKeys = useSceneStore(state => state.inputKeys);
 
-  // Registro maestro para comunicar React con el GameLoop directo
   const meshRegistry = useRef(new Map());
   const pointerDownPos = useRef({ x: 0, y: 0 });
 
@@ -292,7 +292,6 @@ export const Stage = memo(function Stage() {
             }
           }
         }}
-        // CORRECCIÓN: Usamos un objeto de eventos para evitar que 'compute' llegue al div
         events={(store) => ({
           ...store.events,
           compute: (event, state) => {
@@ -307,7 +306,8 @@ export const Stage = memo(function Stage() {
             state.raycaster.setFromCamera(state.pointer, state.camera);
           }
         })}
-        gl={{ preserveDrawingBuffer: true, alpha: true }}
+        // OPTIMIZATION: Disable preserveDrawingBuffer to save memory
+        gl={{ preserveDrawingBuffer: false, alpha: true }}
         style={{ background: 'transparent' }}
       >
         <GameLoopManager

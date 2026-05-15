@@ -13,7 +13,7 @@ import {
   Film, Settings, SkipBack, SkipForward, Clock,
   Pipette, PaintBucket, Undo2, Redo2, ZoomIn, ZoomOut,
   FlipHorizontal, Grid, Sun, Moon,
-  BoxSelect // Added for selection tool
+  BoxSelect
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import Editor from '@monaco-editor/react';
@@ -54,7 +54,7 @@ const IconButton = ({ icon: Icon, label, onClick, active, variant = 'default', s
   );
 };
 
-const ArtistPanel = ({ children }) => {
+const ArtistPanelUI = () => {
   const {
     addEntity, director, toggleCameraLock, saveCameraBookmark, restoreCameraBookmark, removeCameraBookmark,
     transformMode, setTransformMode, selectedEntityId, removeEntity
@@ -130,7 +130,6 @@ const ArtistPanel = ({ children }) => {
         <IconButton icon={Move} label="Pan (Space+Drag)" active={studioTools.active === 'pan'} onClick={() => setStudioTool({ active: 'pan' })} />
         <IconButton icon={PenTool} label="Brush (B)" active={studioTools.active === 'pencil'} onClick={() => setStudioTool({ active: 'pencil' })} />
         <IconButton icon={Eraser} label="Eraser (E)" active={studioTools.active === 'eraser'} onClick={() => setStudioTool({ active: 'eraser' })} />
-        {/* Selection Tool Button */}
         <IconButton icon={BoxSelect} label="Selection (M)" active={studioTools.active === 'selection'} onClick={() => setStudioTool({ active: 'selection' })} />
         <IconButton icon={PaintBucket} label="Fill Layer" active={studioTools.active === 'bucket'} onClick={() => setStudioTool({ active: 'bucket' })} />
         <IconButton icon={Pipette} label="Eyedropper (I)" active={studioTools.active === 'pipette'} onClick={() => setStudioTool({ active: 'pipette' })} />
@@ -194,83 +193,7 @@ const ArtistPanel = ({ children }) => {
         </div>
       </div>
 
-      <div className="ide-center-col">
-        <div className="ide-viewport-wrapper">
-          {children}
-        </div>
-
-        {/* BOTTOM DOCK (Animation Timeline) */}
-        <div className="ide-timeline">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Film size={18} color="var(--accent-primary)" />
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '0.05em' }}>ANIMATION TIMELINE</span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flex: 1, padding: '0 2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'var(--bg-deep)', padding: '0.3rem', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                <button onClick={() => setTimeline({ currentFrame: Math.max(0, timeline.currentFrame - 1) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0.2rem' }}><SkipBack size={16} /></button>
-                <button onClick={() => setTimeline({ isPlaying: !timeline.isPlaying })} style={{ background: timeline.isPlaying ? 'var(--btn-primary-bg)' : 'var(--bg-deep)', color: 'var(--text-inverse)', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0.4rem 0.75rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center' }}>
-                  {timeline.isPlaying ? <Square size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
-                </button>
-                <button onClick={() => setTimeline({ currentFrame: Math.min(timeline.totalFrames - 1, timeline.currentFrame + 1) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0.2rem' }}><SkipForward size={16} /></button>
-              </div>
-
-              <div style={{ flex: 1, margin: '0 0.5rem', position: 'relative', height: '20px', display: 'flex', alignItems: 'center' }}>
-                <div style={{ position: 'absolute', top: '-12px', left: '7px', right: '7px', height: '12px', display: 'flex' }}>
-                  {(timeline.tags || []).map((tag, i) => {
-                    const left = (tag.start / Math.max(1, timeline.totalFrames - 1)) * 100;
-                    const width = ((tag.end - tag.start) / Math.max(1, timeline.totalFrames - 1)) * 100;
-                    return (
-                      <div key={i} title={`${tag.name} (${tag.start}-${tag.end})`} style={{ position: 'absolute', left: `${left}%`, width: `${width}%`, height: '100%', background: 'var(--accent-glow)', borderLeft: '1px solid var(--accent-primary)', borderRight: '1px solid var(--accent-primary)', fontSize: '9px', color: 'var(--accent-primary)', overflow: 'hidden', paddingLeft: '4px', whiteSpace: 'nowrap', borderRadius: '2px 2px 0 0', cursor: 'pointer' }} onDoubleClick={() => {
-                        const newTags = timeline.tags.filter(t => t !== tag);
-                        setTimeline({ tags: newTags });
-                      }}>
-                        {tag.name}
-                      </div>
-                    );
-                  })}
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max={timeline.totalFrames - 1}
-                  value={timeline.currentFrame}
-                  onChange={(e) => setTimeline({ currentFrame: Number(e.target.value) })}
-                  style={{ width: '100%', position: 'relative', zIndex: 2 }}
-                />
-              </div>
-
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-primary)', minWidth: '50px', textAlign: 'right' }}>
-                {timeline.currentFrame + 1} / {timeline.totalFrames}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                <Clock size={14} /> {timeline.fps} FPS
-              </div>
-              <button
-                onClick={() => {
-                  const name = prompt("Clip Tag Name (e.g. idle):");
-                  if (name) {
-                    const endFrame = Math.min(timeline.totalFrames - 1, timeline.currentFrame + 5);
-                    setTimeline({ tags: [...(timeline.tags || []), { name, start: timeline.currentFrame, end: endFrame }] });
-                  }
-                }}
-                style={{ background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', borderRadius: '4px', padding: '0.2rem 0.5rem', fontSize: '0.7rem', cursor: 'pointer' }}
-                title="Add Animation Clip at current frame"
-              >
-                + Tag
-              </button>
-              <IconButton icon={Layers} label="Toggle Onion Skin" active={timeline.onionSkin} onClick={() => setTimeline({ onionSkin: !timeline.onionSkin })} />
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="ide-sidebar-right">
-        {/* ART LAYERS PANEL */}
         <GlassPanel style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flex: 1, minHeight: '0', border: 'none', background: 'transparent' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)' }}>
@@ -329,7 +252,6 @@ const ArtistPanel = ({ children }) => {
           )}
         </GlassPanel>
 
-        {/* 3D REFERENCE PANEL */}
         <GlassPanel style={{ padding: '1rem', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>3D Reference</h3>
@@ -413,7 +335,7 @@ const ArtistPanel = ({ children }) => {
   );
 };
 
-const DevPanel = ({ children }) => {
+const DevPanelUI = () => {
   const {
     entities, selectedEntityId, setSelectedEntity, updateEntityLogic,
     updateEntityData, removeEntity, duplicateEntity, sceneLogic,
@@ -470,12 +392,6 @@ const DevPanel = ({ children }) => {
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="ide-center-col">
-        <div className="ide-viewport-wrapper">
-          {children}
-        </div>
       </div>
 
       {!selectedEntity ? (
@@ -595,7 +511,11 @@ export function WorkspaceSwitcher({ children }) {
     director: state.director
   })));
 
-  // Lógica de exportación reconstruida para usar los stores modulares
+  const { timeline, setTimeline } = useArtStore(useShallow(state => ({
+    timeline: state.timeline,
+    setTimeline: state.setTimeline
+  })));
+
   const handleExport = () => {
     const sceneState = useSceneStore.getState();
     const artState = useArtStore.getState();
@@ -712,14 +632,57 @@ export function WorkspaceSwitcher({ children }) {
       </div>
 
       <div className="ide-body">
-        {!isPlaying ? (
-          workspaceMode === 'artist' ? <ArtistPanel>{children}</ArtistPanel> : <DevPanel>{children}</DevPanel>
-        ) : (
-          <div className="ide-center-col">
-            <div className="ide-viewport-wrapper">
-              {children}
-            </div>
+        <div className="ide-center-col">
+          <div className="ide-viewport-wrapper">
+            {children}
           </div>
+
+          {!isPlaying && workspaceMode === 'artist' && (
+            <div className="ide-timeline">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Film size={18} color="var(--accent-primary)" />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '0.05em' }}>ANIMATION TIMELINE</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flex: 1, padding: '0 2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'var(--bg-deep)', padding: '0.3rem', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+                    <button onClick={() => setTimeline({ currentFrame: Math.max(0, timeline.currentFrame - 1) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0.2rem' }}><SkipBack size={16} /></button>
+                    <button onClick={() => setTimeline({ isPlaying: !timeline.isPlaying })} style={{ background: timeline.isPlaying ? 'var(--btn-primary-bg)' : 'var(--bg-deep)', color: 'var(--text-inverse)', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0.4rem 0.75rem', transition: 'all 0.2s', display: 'flex', alignItems: 'center' }}>
+                      {timeline.isPlaying ? <Square size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+                    </button>
+                    <button onClick={() => setTimeline({ currentFrame: Math.min(timeline.totalFrames - 1, timeline.currentFrame + 1) })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '0.2rem' }}><SkipForward size={16} /></button>
+                  </div>
+
+                  <div style={{ flex: 1, margin: '0 0.5rem', position: 'relative', height: '20px', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="range"
+                      min="0"
+                      max={timeline.totalFrames - 1}
+                      value={timeline.currentFrame}
+                      onChange={(e) => setTimeline({ currentFrame: Number(e.target.value) })}
+                      style={{ width: '100%', position: 'relative', zIndex: 2 }}
+                    />
+                  </div>
+
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-primary)', minWidth: '50px', textAlign: 'right' }}>
+                    {timeline.currentFrame + 1} / {timeline.totalFrames}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    <Clock size={14} /> {timeline.fps} FPS
+                  </div>
+                  <IconButton icon={Layers} label="Toggle Onion Skin" active={timeline.onionSkin} onClick={() => setTimeline({ onionSkin: !timeline.onionSkin })} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!isPlaying && (
+          workspaceMode === 'artist' ? <ArtistPanelUI /> : <DevPanelUI />
         )}
       </div>
     </div>
