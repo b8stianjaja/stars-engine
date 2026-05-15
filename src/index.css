@@ -1,1 +1,75 @@
-@import './App.css';
+/* src/index.css */
+:root {
+    --header-height: 48px;
+    --panel-width: 280px;
+    --radius-sm: 4px;
+
+    /* Colores - Tema Oscuro (Default) */
+    --bg-app: #09090b;
+    --bg-panel: #18181b;
+    --bg-input: #0f172a;
+    --border-color: #27272a;
+    --text-main: #f8fafc;
+    --text-muted: #a1a1aa;
+    --accent: #0ea5e9;
+}
+
+/* Selector de Tema */
+[data-theme='light'] {
+    --bg-app: #f8fafc;
+    --bg-panel: #ffffff;
+    --bg-input: #f1f5f9;
+    --border-color: #e2e8f0;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body,
+#root,
+.stars-engine-app {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.engine-header {
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background-color: var(--bg-panel);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 10;
+}
+
+.ui-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.ui-btn:hover {
+    border-color: var(--accent);
+}
+
+.panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--bg-panel);
+}

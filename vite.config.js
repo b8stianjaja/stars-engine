@@ -18,6 +18,9 @@ export default defineConfig({
   server: {
     strictPort: true,
     port: 5173,
+    hmr: {
+      overlay: true,
+    },
   },
   build: {
     target: process.env.TAURI_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
