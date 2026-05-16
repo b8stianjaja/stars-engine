@@ -10,14 +10,12 @@ function CameraController() {
     const { camera } = useThree();
     const controlsRef = useRef();
 
-    // Suscripción atómica filtrada para evitar ciclos de re-renderizado infinito durante el drag
     const activeViewId = useSystemicStore(state => state.workspace.activeViewId);
+    const paintMode = useSystemicStore(state => state.layerPlayback.paintMode);
     const updateCustomCameraTransform = useSystemicStore(state => state.updateCustomCameraTransform);
 
     useEffect(() => {
         if (!controlsRef.current) return;
-
-        // Adquisición síncrona mediante snapshot no reactivo para romper bucles circulares
         const cameraViews = useSystemicStore.getState().workspace.cameraViews;
         const targetView = cameraViews[activeViewId];
         if (!targetView) return;
@@ -27,115 +25,53 @@ function CameraController() {
         camera.fov = targetView.fov || 40;
         camera.updateProjectionMatrix();
 
-        // Control dinámico de rotación axial DCC según el tipo de proyección
-        controlsRef.current.enableRotate = !targetView.isFixed;
+        // Bloquear órbita si el modo calco sobre la plantilla de referencia está activo
+        controlsRef.current.enableRotate = !targetView.isFixed && !paintMode;
         controlsRef.current.update();
-    }, [activeViewId, camera]);
+    }, [activeViewId, camera, paintMode]);
 
     const handleCameraChange = () => {
-        if (!controlsRef.current) return;
-
-        if (activeViewId === 'free') {
+        if (activeViewId === 'free' && controlsRef.current) {
             const pos = [camera.position.x, camera.position.y, camera.position.z];
             const target = [controlsRef.current.target.x, controlsRef.current.target.y, controlsRef.current.target.z];
-
-            // Persistencia silenciosa del transform en el almacén global
             updateCustomCameraTransform('free', pos, target);
         }
     };
 
-    return (
-        <OrbitControls
-            ref={controlsRef}
-            makeDefault
-            enableDamping
-            dampingFactor={0.05}
-            onChange={handleCameraChange}
-        />
-    );
+    return <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.05} onChange={handleCameraChange} />;
 }
 
-function CameraLayerPlane({ base64Data, orientation, layerIndex }) {
+function TransparentReferenceBillboard({ base64Frames, layerIndex }) {
     const [texture, setTexture] = useState(null);
+    const { camera } = useThree();
+    const currentFrameIndex = useSystemicStore(state => state.layerPlayback.currentFrameIndex);
+
+    const frames = base64Frames || [];
+    const frameData = frames[currentFrameIndex] || frames[frames.length - 1];
 
     useEffect(() => {
-        if (!base64Data) {
+        if (!frameData) {
             setTexture(null);
             return;
         }
         const img = new Image();
-        img.src = base64Data;
+        img.src = frameData;
         img.onload = () => {
             const tex = new THREE.Texture(img);
             tex.needsUpdate = true;
             setTexture(tex);
         };
-    }, [base64Data]);
+    }, [frameData]);
 
     if (!texture) return null;
 
-    let rotation = [0, 0, 0];
-    let position = [0, 0, 0];
-    const stepOffset = layerIndex * 0.15;
-
-    if (orientation === 'horizontal') {
-        rotation = [-Math.PI / 2, 0, 0];
-        position = [0, 0.01 + stepOffset, 0];
-    } else if (orientation === 'vertical-z') {
-        rotation = [0, 0, 0];
-        position = [0, 0, 0.01 + stepOffset];
-    } else if (orientation === 'vertical-x') {
-        rotation = [0, -Math.PI / 2, 0];
-        position = [0.01 + stepOffset, 0, 0];
-    }
-
+    // Colocar el dibujo del artista en un plano semi-translúcido frente a la cámara de referencia
+    const distance = 10 - (layerIndex * 0.1);
     return (
-        <mesh rotation={rotation} position={position} receiveShadow castShadow>
-            <planeGeometry args={[40, 40]} />
-            <meshStandardMaterial
-                map={texture}
-                transparent={true}
-                opacity={0.9}
-                roughness={0.7}
-                metalness={0.1}
-                side={THREE.DoubleSide}
-            />
+        <mesh position={[0, 0, -distance]}>
+            <planeGeometry args={[12, 12]} />
+            <meshBasicMaterial map={texture} transparent opacity={0.85} depthWrite={false} />
         </mesh>
-    );
-}
-
-function SpatialCanvasMatrix() {
-    const canvasLayers = useSystemicStore(state => state.canvasLayers);
-    const cameraViews = useSystemicStore(state => state.workspace.cameraViews);
-    const currentFrameIndex = useSystemicStore(state => state.layerPlayback.currentFrameIndex);
-
-    return (
-        <group>
-            {Object.keys(cameraViews).map((viewId) => {
-                const config = cameraViews[viewId];
-                const viewData = canvasLayers[viewId] || {};
-                const layers = ['background', 'midground', 'foreground'];
-
-                return (
-                    <group key={viewId}>
-                        {layers.map((layerKey, idx) => {
-                            const frames = viewData[layerKey] || [];
-                            const frameData = frames[currentFrameIndex] || frames[frames.length - 1];
-                            if (!frameData) return null;
-
-                            return (
-                                <CameraLayerPlane
-                                    key={layerKey}
-                                    base64Data={frameData}
-                                    orientation={config.orientation}
-                                    layerIndex={idx}
-                                />
-                            );
-                        })}
-                    </group>
-                );
-            })}
-        </group>
     );
 }
 
@@ -144,6 +80,9 @@ export function Viewport({ sharedBuffer, worker }) {
     const activeViewId = useSystemicStore(state => state.workspace.activeViewId);
     const studioMode = useSystemicStore(state => state.workspace.studioMode);
     const cameraViews = useSystemicStore(state => state.workspace.cameraViews);
+    const canvasLayers = useSystemicStore(useShallow(state => state.canvasLayers));
+    const paintMode = useSystemicStore(state => state.layerPlayback.paintMode);
+    const opacityGuide = useSystemicStore(state => state.layerPlayback.opacityGuide);
 
     const selectEntity = useSystemicStore(state => state.selectEntity);
     const setTransformMode = useSystemicStore(state => state.setTransformMode);
@@ -153,47 +92,49 @@ export function Viewport({ sharedBuffer, worker }) {
 
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (studioMode !== 'design') return;
+            if (studioMode !== 'design' || paintMode) return;
             const key = e.key.toLowerCase();
-
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            const isEditable = document.activeElement ? document.activeElement.isContentEditable : false;
-            const isMonaco = document.activeElement ? document.activeElement.className.includes('monaco') : false;
-
-            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || isEditable || isMonaco) return;
+            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
 
             if (key === 'w') setTransformMode('translate');
             if (key === 'r') setTransformMode('scale');
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [setTransformMode, studioMode]);
+    }, [setTransformMode, studioMode, paintMode]);
 
-    const handlePointerMissed = (e) => {
-        if (gizmoRef.current && gizmoRef.current.axis) return;
-        if (e.target === e.currentTarget) selectEntity(null);
-    };
+    const activeViewData = canvasLayers[activeViewId] || {};
 
     return (
         <>
             <PerspectiveCamera makeDefault position={currentView.position} fov={currentView.fov || 40} />
             <CameraController />
 
-            <color attach="background" args={['#050508']} />
-            <ambientLight intensity={0.4} />
-            <directionalLight position={[15, 25, 15]} intensity={2.0} castShadow shadow-mapSize={[2048, 2048]} />
+            <color attach="background" args={['#030306']} />
+            <ambientLight intensity={0.3 + (1 - opacityGuide) * 0.4} />
+            <directionalLight position={[15, 30, 15]} intensity={1.5} castShadow />
 
-            <SpatialCanvasMatrix />
-
-            <group onPointerMissed={handlePointerMissed}>
-                {entityIds.map((id) => (
-                    <Actor key={id} id={id} sharedBuffer={sharedBuffer} worker={worker} gizmoRef={gizmoRef} />
-                ))}
+            {/* Renderizado de la estructura volumétrica de andamiaje */}
+            <group style={{ opacity: paintMode ? opacityGuide : 1.0 }}>
+                <group onPointerMissed={() => { if (!gizmoRef.current?.axis) selectEntity(null); }}>
+                    {entityIds.map((id) => (
+                        <Actor key={id} id={id} sharedBuffer={sharedBuffer} worker={worker} gizmoRef={gizmoRef} />
+                    ))}
+                </group>
             </group>
 
-            <ContactShadows position={[0, -0.005, 0]} opacity={0.6} scale={40} blur={2.0} far={5} />
-            <gridHelper args={[40, 40, '#ff00aa', '#14141a']} position={[0, 0, 0]} />
+            {/* Capas de previsualización de ilustración fija integradas al viewport */}
+            {!paintMode && (
+                <group>
+                    {['background', 'midground', 'foreground'].map((key, idx) => (
+                        <TransparentReferenceBillboard key={key} base64Frames={activeViewData[key]} layerIndex={idx} />
+                    ))}
+                </group>
+            )}
+
+            <ContactShadows position={[0, -0.005, 0]} opacity={0.5} scale={40} blur={2} far={4} />
+            <gridHelper args={[50, 50, '#ff00aa', '#111116']} position={[0, 0, 0]} />
         </>
     );
 }
