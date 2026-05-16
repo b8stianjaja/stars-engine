@@ -4,7 +4,7 @@ const MAX_ENTITIES = 2000;
 const initialFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i);
 
 export const useSystemicStore = create((set, get) => ({
-    // --- ESTADO ESTRUCTURAL ---
+    // --- ESTADO ESTRUCTURAL 2.5D ---
     workspace: {
         studioMode: 'design', // 'design' | 'logic' | 'play'
         selectedEntityId: null,
@@ -86,8 +86,22 @@ export const useSystemicStore = create((set, get) => ({
         return { entities: { ...state.entities, [id]: { ...state.entities[id], isGhostMask: isMask } } };
     }),
 
-    updateSpriteAnimation: (id, frameIndex, direction) => set((state) => {
-        if (!state.entities[id]) return state;
-        return { entities: { ...state.entities, [id]: { ...state.entities[id], spriteState: { frameIndex, direction } } } };
+    // --- CARGA DE ESTADO NATIVO (Deserialización) ---
+    loadSceneState: (sceneData) => set((state) => {
+        // Restauramos los índices libres basados en las entidades cargadas
+        const usedIndices = Object.values(sceneData.entities).map(e => e.index);
+        const newFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => i)
+            .filter(i => !usedIndices.includes(i))
+            .reverse();
+
+        return {
+            entities: sceneData.entities || {},
+            freeIndices: newFreeIndices,
+            workspace: {
+                ...state.workspace,
+                directorCameraData: sceneData.camera || null,
+                cameraLocked: sceneData.camera ? true : false
+            }
+        };
     })
 }));
