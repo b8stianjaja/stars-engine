@@ -17,16 +17,31 @@ export function TelemetryHUD({ worker }) {
 
     return (
         <div style={{
-            position: 'absolute', top: 20, left: 20, color: '#00ff66',
-            fontFamily: '"Fira Code", monospace', fontSize: '11px', pointerEvents: 'none',
-            background: 'rgba(5,5,8,0.75)', padding: '12px', borderLeft: '3px solid #00ff66', zIndex: 100
+            color: '#00ff66',
+            fontFamily: '"Fira Code", monospace',
+            fontSize: '11px',
+            padding: '12px',
+            background: '#050508',
+            boxSizing: 'border-box'
         }}>
-            <div style={{ fontWeight: 'bold' }}>stars engine  V1.0-CORE</div>
-            <div style={{ opacity: 0.5, margin: '4px 0' }}>-------------------</div>
-            <div>TICK: 60Hz (HARDWARE)</div>
-            <div>SCENE_NODES: {entityCount}</div>
-            <div>KERNEL_LOAD: {metrics.workerLoad.toFixed(3)}ms</div>
-            <div style={{ marginTop: '4px' }}>GPU_VIEWPORT: {Math.round(metrics.fps)} FPS</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span style={{ color: '#475569' }}>SYSTEM_TICK:</span>
+                <span style={{ fontWeight: 'bold' }}>60Hz_FIXED</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span style={{ color: '#475569' }}>SCENE_NODES:</span>
+                <span>{entityCount}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span style={{ color: '#475569' }}>KERNEL_LOAD:</span>
+                <span style={{ color: metrics.workerLoad > 5 ? '#ef4444' : '#00ff66', fontWeight: 'bold' }}>
+                    {metrics.workerLoad.toFixed(3)}ms
+                </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#475569' }}>GPU_VIEWPORT:</span>
+                <span style={{ color: '#ff00aa', fontWeight: 'bold' }}>{Math.round(metrics.fps)} FPS</span>
+            </div>
         </div>
     );
 }

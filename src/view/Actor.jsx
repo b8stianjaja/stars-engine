@@ -10,7 +10,6 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
 
     const floatView = useMemo(() => new Float32Array(sharedBuffer), [sharedBuffer]);
 
-    // Suscripciones Moleculares Atómicas Inmutables de Zustand 5
     const entityData = useSystemicStore((state) => state.entities[id]);
     const selectedEntityId = useSystemicStore((state) => state.workspace.selectedEntityId);
     const showBlueprints = useSystemicStore((state) => state.workspace.showBlueprints);
@@ -22,7 +21,6 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
 
     const isSelected = selectedEntityId === id;
 
-    // Limpieza simétrica del puntero del Gizmo cuando se destruye o muta el foco de la entidad
     useEffect(() => {
         return () => {
             if (isSelected && gizmoRef.current) {
@@ -50,7 +48,6 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
 
     const handlePointerOver = (e) => {
         e.stopPropagation();
-        // Si el artista está operando un Gizmo, congelamos los efectos de Over/Out colaterales
         if (gizmoRef.current && gizmoRef.current.axis) return;
         setHovered(true);
         document.body.style.cursor = 'pointer';
@@ -64,13 +61,7 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
 
     const handlePointerDown = (e) => {
         e.stopPropagation();
-
-        // CORRECCIÓN CRÍTICA DE GHOST RAYCAST: Si el puntero está interactuando con los ejes del Gizmo activo,
-        // cancelamos inmediatamente la selección para evitar perforar la entidad trasera.
-        if (gizmoRef.current && gizmoRef.current.axis) {
-            return;
-        }
-
+        if (gizmoRef.current && gizmoRef.current.axis) return;
         selectEntity(id);
     };
 
@@ -104,7 +95,6 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
                 )}
             </mesh>
 
-            {/* INSTANCIACIÓN INTEGRAL DEL CONTROLADOR DE VECTORES ESPACIALES */}
             {isSelected && (
                 <TransformControls
                     ref={(instance) => {
@@ -128,16 +118,20 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
                         updateEntityTransform(id, 'position', finalPos);
                         updateEntityTransform(id, 'scale', finalScale);
 
-                        // 2. Despachar coordenadas estables finales al Logic Kernel a 60Hz
+                        // 2. Despachar coordenadas estables y dimensiones finales al Logic Kernel
                         if (worker) {
                             worker.postMessage({
                                 type: 'UPDATE_PHYSICAL_POS',
-                                payload: { id, x: finalPos[0], y: finalPos[1], z: finalPos[2] }
+                                payload: {
+                                    id,
+                                    x: finalPos[0], y: finalPos[1], z: finalPos[2],
+                                    scaleX: finalScale[0], scaleY: finalScale[1], scaleZ: finalScale[2]
+                                }
                             });
                         }
                     }}
                     onChange={() => {
-                        // Sincronización de Baja Latencia reactiva continua durante el arrastre dinámico
+                        // Sincronización continua en caliente de baja latencia durante traducción
                         if (isDraggingRef.current && transformMode === 'translate' && worker) {
                             worker.postMessage({
                                 type: 'UPDATE_PHYSICAL_POS',

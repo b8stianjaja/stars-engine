@@ -1,9 +1,10 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { PerspectiveCamera, OrbitControls, ContactShadows } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { useSystemicStore } from '../core/engine.store';
 import { Actor } from './Actor';
+import * as THREE from 'three';
 
 function CameraController() {
     const { camera } = useThree();
@@ -32,23 +33,59 @@ function CameraController() {
     return <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.05} />;
 }
 
+function DrawnArtProjectionPlane({ base64Data, offsetHeight, tintColor }) {
+    const [artTexture, setArtTexture] = useState(null);
+
+    useEffect(() => {
+        if (!base64Data) {
+            setArtTexture(null);
+            return;
+        }
+
+        const imageElement = new Image();
+        imageElement.src = base64Data;
+        imageElement.onload = () => {
+            const texture = new THREE.Texture(imageElement);
+            texture.needsUpdate = true;
+            setArtTexture(texture);
+        };
+    }, [base64Data]);
+
+    if (!artTexture) return null;
+
+    return (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, offsetHeight, 0]} receiveShadow>
+            <planeGeometry args={[40, 40]} />
+            <meshStandardMaterial
+                map={artTexture}
+                transparent={true}
+                opacity={0.85}
+                roughness={0.8}
+                metalness={0.1}
+                color={tintColor}
+            />
+        </mesh>
+    );
+}
+
 export function Viewport({ sharedBuffer, worker }) {
     const entityIds = useSystemicStore(useShallow(state => Object.keys(state.entities)));
     const activeViewId = useSystemicStore(state => state.workspace.activeViewId);
+    const studioMode = useSystemicStore(state => state.workspace.studioMode);
     const cameraViews = useSystemicStore(state => state.workspace.cameraViews);
+    const canvasLayers = useSystemicStore(useShallow(state => state.canvasLayers));
+
     const selectEntity = useSystemicStore(state => state.selectEntity);
     const setTransformMode = useSystemicStore(state => state.setTransformMode);
 
     const currentView = cameraViews[activeViewId] || cameraViews['free'];
-
-    // Puntero de referencia técnica O(1) para contener el Gizmo activo en el espacio tridimensional
     const gizmoRef = useRef(null);
 
-    // SISTEMA DE HOTKEYS INDUSTRIAL: Alternancia en caliente de herramientas de composición
+    // Bloqueo de atajos CAD si el artista no está en su estudio correspondiente
     useEffect(() => {
         const handleKeyDown = (e) => {
+            if (studioMode !== 'artist') return;
             const key = e.key.toLowerCase();
-            // Evitar conflictos si el desarrollador está escribiendo código en el Monaco Editor
             if (document.activeElement.tagName === 'INPUT' || document.activeElement.className.includes('monaco')) {
                 return;
             }
@@ -57,13 +94,11 @@ export function Viewport({ sharedBuffer, worker }) {
         };
 
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [setTransformMode]);
+        return () => window.window.removeEventListener('keydown', handleKeyDown);
+    }, [setTransformMode, studioMode]);
 
     const handlePointerMissed = (e) => {
-        // Bloqueo estricto: Si el usuario deselecciona, nos aseguramos que no esté tocando los ejes del Gizmo
         if (gizmoRef.current && gizmoRef.current.axis) return;
-
         if (e.target === e.currentTarget) {
             selectEntity(null);
         }
@@ -76,10 +111,12 @@ export function Viewport({ sharedBuffer, worker }) {
 
             <color attach="background" args={['#07070a']} />
 
-            {/* Atmósfera Cromática Avanzada Studio para el Artista */}
             <ambientLight intensity={0.35} />
             <directionalLight position={[15, 22, 15]} intensity={2.2} castShadow shadow-mapSize={[2048, 2048]} />
-            <pointLight position={[-12, -8, -12]} intensity={0.7} color="#6366f1" />
+            <pointLight position={[-12, -8, -12]} intensity={0.7} color={studioMode === 'artist' ? "#ff00aa" : "#6366f1"} />
+
+            <DrawnArtProjectionPlane base64Data={canvasLayers.background} offsetHeight={0.005} tintColor="#ffffff" />
+            <DrawnArtProjectionPlane base64Data={canvasLayers.foreground} offsetHeight={0.01} tintColor="#ffffff" />
 
             <group onPointerMissed={handlePointerMissed}>
                 {entityIds.map((id) => (
@@ -95,9 +132,7 @@ export function Viewport({ sharedBuffer, worker }) {
 
             <ContactShadows position={[0, -0.005, 0]} opacity={0.65} scale={30} blur={2.5} far={6} />
 
-            {/* Grilla de Andamiaje Técnico de Referencia de Dos Tonos */}
-            <gridHelper args={[40, 40, '#6366f1', '#1e1e2f']} position={[0, 0, 0]} />
-            <gridHelper args={[40, 8, '#ff00aa', 'transparent']} position={[0, 0.001, 0]} />
+            <gridHelper args={[40, 40, studioMode === 'artist' ? '#ff00aa' : '#6366f1', '#1a1a24']} position={[0, 0, 0]} />
         </>
     );
 }

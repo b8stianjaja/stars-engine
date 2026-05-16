@@ -2,25 +2,25 @@ import { useRef, useEffect, useState } from 'react';
 import { useSystemicStore } from '../../core/engine.store';
 import { emitSyncEvent } from '../../core/bridge/sync.client';
 
-export function DrawingCanvasLayer() {
+export function DrawingCanvasLayer({ worker }) {
     const canvasRef = useRef(null);
     const contextRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const [brushColor, setBrushColor] = useState('#10b981'); // Esmeralda por defecto
+    const [brushColor, setBrushColor] = useState('#10b981');
     const [brushSize, setBrushSize] = useState(8);
-    const [activeLayer, setActiveLayer] = useState('foreground'); // foreground o background
+    const [activeLayer, setActiveLayer] = useState('foreground');
 
     const activeViewId = useSystemicStore((state) => state.workspace.activeViewId);
+    const studioMode = useSystemicStore((state) => state.workspace.studioMode);
     const updateLayerAsset = useSystemicStore((state) => state.updateLayerAsset);
 
-    // Si estamos en Cámara Libre, el lienzo se desactiva por completo para dejar trabajar al desarrollador
-    const isFreeCamera = activeViewId === 'free';
+    // AISLAMIENTO INTEGRAL: El lienzo se desactiva por completo en Cámara Libre o si entramos al Developer Studio
+    const isLayerDisabled = activeViewId === 'free' || studioMode !== 'artist';
 
     useEffect(() => {
-        if (isFreeCamera || !canvasRef.current) return;
+        if (isLayerDisabled || !canvasRef.current) return;
 
         const canvas = canvasRef.current;
-        // Ajustamos la resolución interna al tamaño real del contenedor de la GPU
         canvas.width = canvas.parentElement.clientWidth;
         canvas.height = canvas.parentElement.clientHeight;
 
@@ -28,7 +28,7 @@ export function DrawingCanvasLayer() {
         context.lineCap = 'round';
         context.lineJoin = 'round';
         contextRef.current = context;
-    }, [isFreeCamera, activeViewId]);
+    }, [isLayerDisabled, activeViewId]);
 
     const startDrawing = ({ nativeEvent }) => {
         if (!contextRef.current) return;
@@ -48,7 +48,6 @@ export function DrawingCanvasLayer() {
         contextRef.current.lineTo(offsetX, offsetY);
         contextRef.current.stroke();
 
-        // Emitimos el trazo en tiempo real por la LAN (Socket.io)
         emitSyncEvent('ARTIST_STROKE', {
             viewId: activeViewId,
             layer: activeLayer,
@@ -59,39 +58,77 @@ export function DrawingCanvasLayer() {
         });
     };
 
+    const dispatchPhysicsBitmask = () => {
+        if (!canvasRef.current) return;
+
+        const mainCanvas = canvasRef.current;
+        const resolution = 64;
+
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = resolution;
+        offscreenCanvas.height = resolution;
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+
+        offscreenCtx.drawImage(mainCanvas, 0, 0, resolution, resolution);
+        const imgData = offscreenCtx.getImageData(0, 0, resolution, resolution);
+        const pixelBuffer = imgData.data;
+
+        const bitmask = new Uint8Array(resolution * resolution);
+        for (let i = 0; i < resolution * resolution; i++) {
+            const alphaIndex = i * 4 + 3;
+            bitmask[i] = pixelBuffer[alphaIndex] > 15 ? 1 : 0;
+        }
+
+        if (worker) {
+            worker.postMessage({
+                type: 'UPDATE_CANVAS_GRID',
+                payload: {
+                    layer: activeLayer,
+                    resolution: resolution,
+                    grid: bitmask
+                }
+            });
+        }
+    };
+
     const stopDrawing = () => {
         if (!isDrawing) return;
         setIsDrawing(false);
         if (!contextRef.current || !canvasRef.current) return;
         contextRef.current.closePath();
 
-        // Al levantar el pincel, guardamos el estado del lienzo en la estructura del Workspace
         const base64Data = canvasRef.current.toDataURL('image/png');
         updateLayerAsset(activeLayer, base64Data);
+
+        dispatchPhysicsBitmask();
     };
 
     const clearCanvas = () => {
         if (!contextRef.current || !canvasRef.current) return;
         contextRef.current.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         updateLayerAsset(activeLayer, null);
+
+        if (worker) {
+            worker.postMessage({
+                type: 'UPDATE_CANVAS_GRID',
+                payload: { layer: activeLayer, resolution: 64, grid: new Uint8Array(64 * 64) }
+            });
+        }
     };
 
     const saveLayerToDisk = () => {
         if (!canvasRef.current) return;
         const base64Data = canvasRef.current.toDataURL('image/png');
-        // Persistencia nativa asíncrona en disco rígido mediante Tauri
         emitSyncEvent('SAVE_CANVAS', {
             entityId: `layer_${activeViewId}_${activeLayer}`,
             imageData: base64Data
         });
-        console.log(`[Stars IDE]: Solicitud de persistencia nativa enviada para la capa: ${activeLayer}`);
     };
 
-    if (isFreeCamera) return null;
+    if (isLayerDisabled) return null;
 
     return (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 50 }}>
-            {/* Canvas Interactivo de Ilustración */}
             <canvas
                 ref={canvasRef}
                 onMouseDown={startDrawing}
@@ -101,23 +138,20 @@ export function DrawingCanvasLayer() {
                 style={{ width: '100%', height: '100%', pointerEvents: 'auto', cursor: 'crosshair', position: 'absolute', top: 0, left: 0 }}
             />
 
-            {/* Caja de Herramientas Flotante del Artista (HUD flotante sobre el canvas) */}
             <div style={{
                 position: 'absolute', bottom: 20, right: 20, background: '#09090dd0', padding: '12px',
                 borderRadius: '6px', border: '1px solid #1a1a26', display: 'flex', gap: '12px',
                 alignItems: 'center', pointerEvents: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)'
             }}>
-                {/* Selector de Capas */}
                 <select
                     value={activeLayer}
                     onChange={(e) => setActiveLayer(e.target.value)}
                     style={{ background: '#111', color: '#fff', border: '1px solid #333', padding: '4px 8px', borderRadius: '4px', fontSize: '11px' }}
                 >
-                    <option value="foreground">Capa Frente (Overlay)</option>
-                    <option value="background">Capa Fondo (Underlay)</option>
+                    <option value="foreground">Capa Frente (Muros Físicos)</option>
+                    <option value="background">Capa Fondo (Zonas de Ruta/Trigger)</option>
                 </select>
 
-                {/* Selector de Color del Pincel */}
                 <input
                     type="color"
                     value={brushColor}
@@ -125,19 +159,17 @@ export function DrawingCanvasLayer() {
                     style={{ border: 'none', background: 'transparent', width: '28px', height: '24px', cursor: 'pointer' }}
                 />
 
-                {/* Control de Grosor */}
                 <input
                     type="range" min="2" max="32"
                     value={brushSize}
                     onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                    style={{ width: '80px', accentColor: '#6366f1' }}
+                    style={{ width: '80px', accentColor: '#ff00aa' }}
                 />
 
-                {/* Acciones de Limpieza y Persistencia */}
                 <button onClick={clearCanvas} style={{ background: '#222', border: 'none', color: '#aaa', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
                     Limpiar
                 </button>
-                <button onClick={saveLayerToDisk} style={{ background: '#6366f1', border: 'none', color: '#fff', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button onClick={saveLayerToDisk} style={{ background: '#ff00aa', border: 'none', color: '#fff', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}>
                     Exportar PNG
                 </button>
             </div>
