@@ -1,40 +1,25 @@
 import { create } from 'zustand';
 
-/**
- * STARS ENGINE V1.0 - Systemic Store (Zustand 5)
- * Gestión inmutable de layouts profesionales, playmodes y variables de gameplay asimétricas.
- */
 export const useSystemicStore = create((set) => ({
-    // --- ESTADO BASE ---
     entities: {},
     visuals: {},
-
-    // --- CAPAS DE ARTE DIBUJADO A MANO ---
-    canvasLayers: {
-        foreground: null,
-        background: null
-    },
-
-    // --- POOL DE MEMORIA INDEXADA ---
+    canvasLayers: {},
     freeIndices: Array.from({ length: 2000 }, (_, i) => 1999 - i),
 
-    // --- ESTADO DEL WORKSPACE DE DISEÑO ---
     workspace: {
-        studioMode: 'artist',     // 'artist' o 'developer'
-        playMode: 'edit',         // 'edit' (Edición/Greyboxing) o 'play' (Simulación Activa)
+        studioMode: 'design',     // 'design' o 'logic'
+        playMode: 'edit',         // 'edit' o 'play'
         activeViewId: 'free',
         showBlueprints: true,
         selectedEntityId: null,
         transformMode: 'translate',
         snapValue: 0.5,
         cameraViews: {
-            free: { name: "Cámara Workspace Libre", position: [8, 8, 8], target: [0, 0, 0] },
-            isometric: { name: "Viewport Isométrico CAD", position: [8, 8, 8], target: [0, 0, 0], fov: 30 },
-            cinematic: { name: "Cámara Gameplay Activa", position: [0, 6, 10], target: [0, 1, 0], fov: 45 }
+            free: { name: "WORKSPACE_FREE_CAMERA", position: [10, 10, 10], target: [0, 0, 0] },
+            isometric: { name: "CAD_ISOMETRIC_VIEW", position: [12, 12, 12], target: [0, 0, 0], fov: 25 },
+            paint_canvas: { name: "TOP_DOWN_PAINT_PLANE", position: [0, 25, 0], target: [0, 0, 0], fov: 40 }
         }
     },
-
-    // --- ACCIONES MUTADORAS ---
 
     setStudioMode: (mode) => set((state) => ({
         workspace: { ...state.workspace, studioMode: mode }
@@ -44,15 +29,14 @@ export const useSystemicStore = create((set) => ({
         workspace: { ...state.workspace, playMode: mode }
     })),
 
-    updateLayerAsset: (layer, base64Data) => set((state) => ({
-        canvasLayers: { ...state.canvasLayers, [layer]: base64Data }
+    updateLayerAsset: (layerKey, base64Data) => set((state) => ({
+        canvasLayers: { ...state.canvasLayers, [layerKey]: base64Data }
     })),
 
     applyPatch: (patch) => set((state) => ({
         entities: { ...state.entities, ...patch }
     })),
 
-    // Mutador quirúrgico para actualizar variables de juego desde telemetría del Kernel
     applyGameplayPatch: (id, gameplayFields) => set((state) => {
         if (!state.entities[id]) return state;
         return {
@@ -84,19 +68,21 @@ export const useSystemicStore = create((set) => ({
                 [id]: {
                     id,
                     index: assignedIndex,
-                    name: data.name || 'Unnamed_Entity',
+                    name: data.name || 'UNNAMED_NODE',
                     type: data.type || 'box',
                     scale: data.scale || [1, 1, 1],
-                    color: data.color || '#4f46e5',
+                    color: data.color || '#6366f1',
                     position: data.position || [0, 0, 0],
-                    scriptCode: data.scriptCode || '// Código lógico de la entidad...\n',
-                    // COMPONENTES DE GAMEPLAY INDUSTRIAL INYECTADOS NATIVAMENTE
+                    scriptCode: data.scriptCode || '// COMPONENT_ROUTINE_SCRIPT\n',
                     gameplay: {
                         health: data.gameplay?.health ?? 100,
                         maxHealth: data.gameplay?.maxHealth ?? 100,
                         damage: data.gameplay?.damage ?? 15,
                         faction: data.gameplay?.faction ?? 'neutral',
-                        inventory: data.gameplay?.inventory || []
+                        inventory: data.gameplay?.inventory || [],
+                        animRow: data.gameplay?.animRow ?? 0,
+                        frameIndex: data.gameplay?.frameIndex ?? 0,
+                        actorState: data.gameplay?.actorState ?? 0
                     }
                 }
             },
@@ -150,17 +136,14 @@ export const useSystemicStore = create((set) => ({
     loadSceneState: (sceneData) => set((state) => {
         const entities = sceneData.entities || {};
         const visuals = sceneData.visuals || {};
-        const canvasLayers = sceneData.canvasLayers || { foreground: null, background: null };
+        const canvasLayers = sceneData.canvasLayers || {};
         const allocatedIndices = Object.values(entities).map(e => e.index);
 
         const freeIndices = Array.from({ length: 2000 }, (_, i) => 1999 - i)
             .filter(idx => !allocatedIndices.includes(idx));
 
         return {
-            entities,
-            visuals,
-            freeIndices,
-            canvasLayers,
+            entities, visuals, freeIndices, canvasLayers,
             workspace: { ...state.workspace, selectedEntityId: null }
         };
     }),

@@ -41,7 +41,6 @@ function DrawnArtProjectionPlane({ base64Data, offsetHeight, tintColor }) {
             setArtTexture(null);
             return;
         }
-
         const imageElement = new Image();
         imageElement.src = base64Data;
         imageElement.onload = () => {
@@ -56,14 +55,7 @@ function DrawnArtProjectionPlane({ base64Data, offsetHeight, tintColor }) {
     return (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, offsetHeight, 0]} receiveShadow>
             <planeGeometry args={[40, 40]} />
-            <meshStandardMaterial
-                map={artTexture}
-                transparent={true}
-                opacity={0.85}
-                roughness={0.8}
-                metalness={0.1}
-                color={tintColor}
-            />
+            <meshStandardMaterial map={artTexture} transparent={true} opacity={0.85} roughness={0.8} metalness={0.1} color={tintColor} />
         </mesh>
     );
 }
@@ -81,27 +73,28 @@ export function Viewport({ sharedBuffer, worker }) {
     const currentView = cameraViews[activeViewId] || cameraViews['free'];
     const gizmoRef = useRef(null);
 
-    // Bloqueo de atajos CAD si el artista no está en su estudio correspondiente
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (studioMode !== 'artist') return;
+            if (studioMode !== 'design') return;
             const key = e.key.toLowerCase();
-            if (document.activeElement.tagName === 'INPUT' || document.activeElement.className.includes('monaco')) {
-                return;
-            }
+
+            const activeTag = document.activeElement ? document.activeElement.tagName : '';
+            const isEditable = document.activeElement ? document.activeElement.isContentEditable : false;
+            const isMonaco = document.activeElement ? document.activeElement.className.includes('monaco') : false;
+
+            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || isEditable || isMonaco) return;
+
             if (key === 'w') setTransformMode('translate');
             if (key === 'r') setTransformMode('scale');
         };
 
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.window.removeEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, [setTransformMode, studioMode]);
 
     const handlePointerMissed = (e) => {
         if (gizmoRef.current && gizmoRef.current.axis) return;
-        if (e.target === e.currentTarget) {
-            selectEntity(null);
-        }
+        if (e.target === e.currentTarget) selectEntity(null);
     };
 
     return (
@@ -109,30 +102,21 @@ export function Viewport({ sharedBuffer, worker }) {
             <PerspectiveCamera makeDefault position={currentView.position} fov={currentView.fov || 40} />
             <CameraController />
 
-            <color attach="background" args={['#07070a']} />
+            <color attach="background" args={['#050508']} />
+            <ambientLight intensity={0.4} />
+            <directionalLight position={[15, 25, 15]} intensity={2.0} castShadow shadow-mapSize={[2048, 2048]} />
 
-            <ambientLight intensity={0.35} />
-            <directionalLight position={[15, 22, 15]} intensity={2.2} castShadow shadow-mapSize={[2048, 2048]} />
-            <pointLight position={[-12, -8, -12]} intensity={0.7} color={studioMode === 'artist' ? "#ff00aa" : "#6366f1"} />
-
-            <DrawnArtProjectionPlane base64Data={canvasLayers.background} offsetHeight={0.005} tintColor="#ffffff" />
-            <DrawnArtProjectionPlane base64Data={canvasLayers.foreground} offsetHeight={0.01} tintColor="#ffffff" />
+            <DrawnArtProjectionPlane base64Data={canvasLayers.background_f0} offsetHeight={0.005} tintColor="#ffffff" />
+            <DrawnArtProjectionPlane base64Data={canvasLayers.foreground_f0} offsetHeight={0.01} tintColor="#ffffff" />
 
             <group onPointerMissed={handlePointerMissed}>
                 {entityIds.map((id) => (
-                    <Actor
-                        key={id}
-                        id={id}
-                        sharedBuffer={sharedBuffer}
-                        worker={worker}
-                        gizmoRef={gizmoRef}
-                    />
+                    <Actor key={id} id={id} sharedBuffer={sharedBuffer} worker={worker} gizmoRef={gizmoRef} />
                 ))}
             </group>
 
-            <ContactShadows position={[0, -0.005, 0]} opacity={0.65} scale={30} blur={2.5} far={6} />
-
-            <gridHelper args={[40, 40, studioMode === 'artist' ? '#ff00aa' : '#6366f1', '#1a1a24']} position={[0, 0, 0]} />
+            <ContactShadows position={[0, -0.005, 0]} opacity={0.6} scale={40} blur={2.0} far={5} />
+            <gridHelper args={[40, 40, '#ff00aa', '#14141a']} position={[0, 0, 0]} />
         </>
     );
 }

@@ -1,6 +1,6 @@
 /**
- * STARS ENGINE V1.0 - Logic & Combat Kernel (Web Worker)
- * Simulación y cálculo determinista a 60Hz de mecánicas de combate e inventarios.
+ * STARS ENGINE V1.0 - Core Simulation Worker
+ * Proprocesamiento físico a 60Hz bajo esquema Stride 16 Floats.
  */
 
 let sharedBuffer = null;
@@ -10,7 +10,19 @@ let simTime = 0;
 const TICK_RATE = 60;
 const TICK_INTERVAL = 1000 / TICK_RATE;
 
-let artGrids = { foreground: null, background: null };
+let artGrids = { foreground: { resolution: 64, frames: {} }, background: { resolution: 64, frames: {} } };
+
+const STRIDE = 16;
+const P_X = 0, P_Y = 1, P_Z = 2;
+const V_X = 3, V_Y = 4, V_Z = 5;
+const S_X = 6, S_Y = 7, S_Z = 8;
+const ROT = 9;
+const ANIM_ROW = 10;
+const FRAME_IDX = 11;
+const COL_MASK = 12;
+const COL_TYPE = 13;
+const GAME_HP = 14;
+const ACTOR_STATE = 15;
 
 const DISPATCHER = {
     INIT_MEM: (payload) => {
@@ -27,16 +39,21 @@ const DISPATCHER = {
             id: payload.id,
             index: payload.index,
             x: payload.x ?? 0, y: payload.y ?? 0, z: payload.z ?? 0,
+            vx: 0, vy: 0, vz: 0,
             scaleX: payload.scaleX ?? 1, scaleY: payload.scaleY ?? 1, scaleZ: payload.scaleZ ?? 1,
             baseX: payload.x ?? 0, baseY: payload.y ?? 0, baseZ: payload.z ?? 0,
-            // ATRIBUTOS DE SISTEMA DE COMBATE INTERNOS
+            rotation: 0,
+            animRow: payload.gameplay?.animRow ?? 0,
+            frameIndex: payload.gameplay?.frameIndex ?? 0,
+            collisionMask: 1,
+            colliderType: payload.colliderType ?? 1, // 1: Cilindro Basal, 2: AABB
             faction: payload.gameplay?.faction || 'neutral',
             health: payload.gameplay?.health || 100,
             maxHealth: payload.gameplay?.maxHealth || 100,
-            attackPower: payload.gameplay?.attackPower || 15,
+            attackPower: payload.gameplay?.damage || 15,
             inventory: payload.gameplay?.inventory || [],
-            lastInCombatTick: 0,
-            iframeWindow: 0, // Control de daño por segundo para evitar colapsos síncronos
+            actorState: 0,
+            iframeWindow: 0,
             collidingWith: [],
             behavior: null
         });
@@ -47,10 +64,9 @@ const DISPATCHER = {
         if (targetIndex !== -1) {
             const ent = entities[targetIndex];
             if (floatView) {
-                const offset = ent.index * 3;
-                floatView[offset] = 0;
-                floatView[offset + 1] = -9999.0;
-                floatView[offset + 2] = 0;
+                const offset = ent.index * STRIDE;
+                floatView.fill(0, offset, offset + STRIDE);
+                floatView[offset + P_Y] = -9999.0;
             }
             entities.splice(targetIndex, 1);
         }
@@ -66,12 +82,14 @@ const DISPATCHER = {
             if (payload.scaleY !== undefined) target.scaleY = payload.scaleY;
             if (payload.scaleZ !== undefined) target.scaleZ = payload.scaleZ;
 
-            // Sincronizar parámetros lúdicos en tiempo real
             if (payload.gameplay) {
                 if (payload.gameplay.faction !== undefined) target.faction = payload.gameplay.faction;
                 if (payload.gameplay.health !== undefined) target.health = payload.gameplay.health;
-                if (payload.gameplay.attackPower !== undefined) target.attackPower = payload.gameplay.attackPower;
+                if (payload.gameplay.damage !== undefined) target.attackPower = payload.gameplay.damage;
                 if (payload.gameplay.inventory !== undefined) target.inventory = [...payload.gameplay.inventory];
+                if (payload.gameplay.animRow !== undefined) target.animRow = payload.gameplay.animRow;
+                if (payload.gameplay.frameIndex !== undefined) target.frameIndex = payload.gameplay.frameIndex;
+                if (payload.gameplay.actorState !== undefined) target.actorState = payload.gameplay.actorState;
             }
         }
     },
@@ -93,14 +111,19 @@ const DISPATCHER = {
         entities = payload.map(e => ({
             id: e.id, index: e.index,
             x: e.position[0], y: e.position[1], z: e.position[2],
+            vx: 0, vy: 0, vz: 0,
             scaleX: e.scale[0], scaleY: e.scale[1], scaleZ: e.scale[2],
             baseX: e.position[0], baseY: e.position[1], baseZ: e.position[2],
+            rotation: 0,
+            animRow: e.gameplay?.animRow || 0,
+            frameIndex: e.gameplay?.frameIndex || 0,
+            collisionMask: 1, colliderType: 1,
             faction: e.gameplay?.faction || 'neutral',
             health: e.gameplay?.health || 100,
             maxHealth: e.gameplay?.maxHealth || 100,
-            attackPower: e.gameplay?.attackPower || 15,
+            attackPower: e.gameplay?.damage || 15,
             inventory: e.gameplay?.inventory || [],
-            lastInCombatTick: 0, iframeWindow: 0,
+            actorState: 0, iframeWindow: 0,
             collidingWith: [], behavior: null
         }));
 
@@ -111,20 +134,18 @@ const DISPATCHER = {
                     const target = entities.find(t => t.id === e.id);
                     if (target) target.behavior = behaviorFunc;
                 } catch (err) {
-                    console.error(`[Stars Kernel Auto-Compile Error]:`, err.message);
+                    console.error(err.message);
                 }
             }
         });
     },
 
     UPDATE_CANVAS_GRID: (payload) => {
-        artGrids[payload.layer] = { resolution: payload.resolution, grid: payload.grid };
+        if (!artGrids[payload.layer]) {
+            artGrids[payload.layer] = { resolution: payload.resolution, frames: {} };
+        }
+        artGrids[payload.layer].frames[payload.frameIndex] = payload.grid;
     }
-};
-
-self.onmessage = (e) => {
-    const { type, payload } = e.data;
-    if (DISPATCHER[type]) DISPATCHER[type](payload);
 };
 
 function runSimulation() {
@@ -133,89 +154,76 @@ function runSimulation() {
     function executionStep() {
         const startTick = performance.now();
         const deltaTime = TICK_INTERVAL / 1000;
-
         simTime += deltaTime;
 
-        // 1. Snapshot posicional previo
         for (let i = 0; i < entities.length; i++) {
             const ent = entities[i];
             ent.oldX = ent.x; ent.oldY = ent.y; ent.oldZ = ent.z;
             if (ent.iframeWindow > 0) ent.iframeWindow -= deltaTime;
         }
 
-        // 2. Procesador AABB de Colisión Estricta y Combate Faccional
+        // Colisionador Basal de Deslizamiento Continuo (XZ)
         for (let i = 0; i < entities.length; i++) entities[i].collidingWith = [];
         for (let i = 0; i < entities.length; i++) {
             const a = entities[i];
+            if (a.health <= 0 || a.collisionMask === 0) continue;
+
             for (let j = i + 1; j < entities.length; j++) {
                 const b = entities[j];
+                if (b.health <= 0 || b.collisionMask === 0) continue;
 
-                const overlapX = Math.abs(a.x - b.x) * 2 < (a.scaleX + b.scaleX);
-                const overlapY = Math.abs(a.y - b.y) * 2 < (a.scaleY + b.scaleY);
-                const overlapZ = Math.abs(a.z - b.z) * 2 < (a.scaleZ + b.scaleZ);
+                const dx = a.x - b.x;
+                const dz = a.z - b.z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                const rA = (a.scaleX + a.scaleZ) / 4;
+                const rB = (b.scaleX + b.scaleZ) / 4;
+                const hOverlap = Math.abs(a.y - b.y) * 2 < (a.scaleY + b.scaleY);
 
-                if (overlapX && overlapY && overlapZ) {
+                if (distance < (rA + rB) && hOverlap) {
                     a.collidingWith.push(b.id);
                     b.collidingWith.push(a.id);
 
-                    // VERIFICACIÓN DE DAÑO DE FACHADA DE COMBATE
-                    // Si pertenecen a facciones contrarias (player vs enemy) y no poseen iframes, se ejecutan deducciones lógicas de vida
+                    if (distance > 0.001) {
+                        const overlap = (rA + rB) - distance;
+                        const pX = (dx / distance) * overlap * 0.5;
+                        const pZ = (dz / distance) * overlap * 0.5;
+                        a.x += pX; a.z += pZ;
+                        b.x -= pX; b.z -= pZ;
+                    }
+
                     if ((a.faction === 'player' && b.faction === 'enemy') || (a.faction === 'enemy' && b.faction === 'player')) {
-                        applyCombatEngagement(a, b);
+                        if (a.iframeWindow <= 0) {
+                            a.health = Math.max(0, a.health - b.attackPower);
+                            a.actorState = 3; a.iframeWindow = 0.4;
+                            syncGameplayToUI(a);
+                        }
+                        if (b.iframeWindow <= 0) {
+                            b.health = Math.max(0, b.health - a.attackPower);
+                            b.actorState = 3; b.iframeWindow = 0.4;
+                            syncGameplayToUI(b);
+                        }
                     }
                 }
             }
         }
 
-        // Runtime API expandida para control lúdico de sistemas de juego
         const api = {
             time: simTime, dt: deltaTime,
             getEntity: (id) => {
-                const target = entities.find(e => e.id === id);
-                if (!target) return null;
-                return {
-                    id: target.id, x: target.x, y: target.y, z: target.z,
-                    health: target.health, faction: target.faction,
-                    inventory: [...target.inventory]
-                };
+                const t = entities.find(e => e.id === id);
+                if (!t) return null;
+                return { id: t.id, x: t.x, y: t.y, z: t.z, health: t.health, faction: t.faction, inventory: [...t.inventory] };
             },
             math: { sin: Math.sin, cos: Math.cos, PI: Math.PI }
         };
 
-        // 3. Despacho lógico de comportamientos inyectados
         for (let i = 0; i < entities.length; i++) {
             const ent = entities[i];
-            ent.isOnDrawing = false; ent.hitWallDrawing = false;
-
-            if (ent.health <= 0) {
-                // Nodo Colapsado en batalla: Forzar eyección visual fuera del render pool
-                if (floatView) {
-                    const offset = ent.index * 3;
-                    floatView[offset] = 0; floatView[offset + 1] = -9999.0; floatView[offset + 2] = 0;
-                }
-                continue;
-            }
-
-            // Mapeador espacial de lienzo a rejilla 3D
-            const mapPlaneCoordinate = (worldX, worldZ, canvasGrid) => {
-                if (!canvasGrid || !canvasGrid.grid) return -1;
-                const res = canvasGrid.resolution;
-                const normX = (worldX + 20) / 40; const normZ = (worldZ + 20) / 40;
-                if (normX >= 0 && normX <= 1 && normZ >= 0 && normZ <= 1) {
-                    return Math.min(res - 1, Math.floor(normZ * res)) * res + Math.min(res - 1, Math.floor(normX * res));
-                }
-                return -1;
-            };
-
-            const bgIdx = mapPlaneCoordinate(ent.x, ent.z, artGrids.background);
-            if (bgIdx !== -1 && artGrids.background.grid[bgIdx] === 1) ent.isOnDrawing = true;
+            if (ent.health <= 0) continue;
 
             if (ent.behavior) {
                 try {
                     ent.time = simTime; ent.dt = deltaTime;
-
-                    // Métodos de juego expuestos de manera quirúrgica
-                    ent.health = ent.health;
                     ent.hasItem = (itemId) => ent.inventory.includes(itemId);
                     ent.addItem = (itemId) => { ent.inventory.push(itemId); syncGameplayToUI(ent); };
 
@@ -223,17 +231,29 @@ function runSimulation() {
                         const dx = tx - ent.x; const dy = ty - ent.y; const dz = tz - ent.z;
                         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
                         if (dist > 0.01) {
-                            const step = Math.min(speed * deltaTime, dist);
-                            ent.x += (dx / dist) * step; ent.y += (dy / dist) * step; ent.z += (dz / dist) * step;
+                            ent.actorState = 1;
+                            ent.vx = (dx / dist) * speed; ent.vz = (dz / dist) * speed;
+                            ent.x += ent.vx * deltaTime; ent.z += ent.vz * deltaTime;
+                            ent.rotation = Math.atan2(-ent.vz, ent.vx);
+                        } else {
+                            ent.actorState = 0; ent.vx = 0; ent.vz = 0;
                         }
                     };
 
                     ent.behavior(ent, api);
 
-                    const fgIdx = mapPlaneCoordinate(ent.x, ent.z, artGrids.foreground);
-                    if (fgIdx !== -1 && artGrids.foreground.grid[fgIdx] === 1) {
-                        ent.x = ent.oldX; ent.y = ent.oldY; ent.z = ent.oldZ;
-                        ent.hitWallDrawing = true;
+                    // Validación del mapa de bits de colisiones dinámicas del lienzo
+                    const grid = artGrids.foreground;
+                    if (grid && grid.frames && grid.frames[ent.frameIndex]) {
+                        const res = grid.resolution;
+                        const nX = (ent.x + 20) / 40; const nZ = (ent.z + 20) / 40;
+                        if (nX >= 0 && nX <= 1 && nZ >= 0 && nZ <= 1) {
+                            const idx = Math.min(res - 1, Math.floor(nZ * res)) * res + Math.min(res - 1, Math.floor(nX * res));
+                            if (grid.frames[ent.frameIndex][idx] === 1) {
+                                ent.x = ent.oldX; ent.z = ent.oldZ;
+                                ent.vx = 0; ent.vz = 0;
+                            }
+                        }
                     }
                 } catch (e) {
                     ent.behavior = null;
@@ -241,54 +261,33 @@ function runSimulation() {
             }
         }
 
-        // 4. Volcado binario O(1) masivo de posiciones válidas
         if (floatView) {
             for (let i = 0; i < entities.length; i++) {
                 const ent = entities[i];
-                if (ent.health <= 0) continue;
-                const offset = ent.index * 3;
-                floatView[offset] = ent.x;
-                floatView[offset + 1] = ent.y;
-                floatView[offset + 2] = ent.z;
+                const offset = ent.index * STRIDE;
+                floatView[offset + P_X] = ent.x; floatView[offset + P_Y] = ent.y; floatView[offset + P_Z] = ent.z;
+                floatView[offset + V_X] = ent.vx; floatView[offset + V_Y] = ent.vy; floatView[offset + V_Z] = ent.vz;
+                floatView[offset + S_X] = ent.scaleX; floatView[offset + S_Y] = ent.scaleY; floatView[offset + S_Z] = ent.scaleZ;
+                floatView[offset + ROT] = ent.rotation; floatView[offset + ANIM_ROW] = ent.animRow;
+                floatView[offset + FRAME_IDX] = ent.frameIndex; floatView[offset + COL_MASK] = ent.collisionMask;
+                floatView[offset + COL_TYPE] = ent.colliderType; floatView[offset + GAME_HP] = ent.health;
+                floatView[offset + ACTOR_STATE] = ent.actorState;
             }
         }
 
         const endTick = performance.now();
         expectedTickTime += TICK_INTERVAL;
-        const nextTimeoutDelay = Math.max(0, TICK_INTERVAL - (endTick - startTick) - (startTick - (expectedTickTime - TICK_INTERVAL)));
-
-        self.postMessage({
-            type: 'TELEMETRY_DATA',
-            payload: { fps: 1000 / TICK_INTERVAL, delta: TICK_INTERVAL, workerLoad: endTick - startTick }
-        });
-
-        setTimeout(executionStep, nextTimeoutDelay);
+        setTimeout(executionStep, Math.max(0, TICK_INTERVAL - (endTick - startTick)));
     }
-
     setTimeout(executionStep, TICK_INTERVAL);
 }
 
-// LOGICA COMBAT INTEGRADA BAJO FILTRADO DE IFRAMES
-function applyCombatEngagement(a, b) {
-    if (a.iframeWindow <= 0) {
-        a.health = Math.max(0, a.health - b.attackPower);
-        a.iframeWindow = 0.5; // 500ms de inmunidad táctica
-        syncGameplayToUI(a);
-    }
-    if (b.iframeWindow <= 0) {
-        b.health = Math.max(0, b.health - a.attackPower);
-        b.iframeWindow = 0.5;
-        syncGameplayToUI(b);
-    }
-}
-
-// NOTIFICACIÓN ASINCRONA CONTROLADA DE CAMBIOS DE ESTADO DE JUEGO A LA INTERFAZ
 function syncGameplayToUI(ent) {
     self.postMessage({
         type: 'PATCH',
         payload: {
             [ent.id]: {
-                gameplay: { faction: ent.faction, health: ent.health, maxHealth: ent.maxHealth, attackPower: ent.attackPower, inventory: [...ent.inventory] }
+                gameplay: { faction: ent.faction, health: ent.health, maxHealth: ent.maxHealth, damage: ent.attackPower, inventory: [...ent.inventory], animRow: ent.animRow, frameIndex: ent.frameIndex, actorState: ent.actorState }
             }
         }
     });

@@ -72,11 +72,17 @@ export function LiveEditor({ worker }) {
     };
 
     return (
-        <div style={{ height: '240px', borderTop: '1px solid #1a1a24', position: 'absolute', bottom: 0, width: '100%', zIndex: 10, display: 'flex', flexDirection: 'column', background: '#09090c' }}>
+        <div style={{
+            height: '100%',
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#09090c'
+        }}>
             {/* BARRA DE HERRAMIENTAS Y CONTROL DE COMPILACIÓN EN TIEMPO REAL */}
             <div style={{
                 height: '32px', background: '#111116', borderBottom: '1px solid #1a1a24',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', boxSizing: 'border-box'
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', boxSizing: 'border-box', flexShrink: 0
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span style={{ fontFamily: '"Fira Code", monospace', fontSize: '11px', color: activeEntity ? '#ff00aa' : '#64748b', fontWeight: 'bold' }}>
@@ -110,7 +116,7 @@ export function LiveEditor({ worker }) {
             </div>
 
             {/* EDITOR MONACO INTEGRADO */}
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ flex: 1, position: 'relative', width: '100%' }}>
                 <Editor
                     height="100%" defaultLanguage="javascript" theme="vs-dark"
                     value={localCode}
