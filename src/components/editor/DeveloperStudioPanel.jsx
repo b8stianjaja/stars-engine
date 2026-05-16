@@ -1,94 +1,119 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSystemicStore } from '../../core/engine.store';
-import { TelemetryHUD } from '../debug/TelemetryHUD';
+
+function SectionHeader({ title }) {
+    return (
+        <div style={{
+            fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)',
+            letterSpacing: '0.3px', textTransform: 'uppercase', marginTop: '10px', marginBottom: '6px'
+        }}>
+            {title}
+        </div>
+    );
+}
 
 export function DeveloperStudioPanel({ worker }) {
     const entities = useSystemicStore(useShallow(state => state.entities));
-    const selectedEntityId = useSystemicStore(useShallow(state => state.workspace.selectedEntityId));
+    const selectedEntityId = useSystemicStore(state => state.workspace.selectedEntityId);
     const selectEntity = useSystemicStore(state => state.selectEntity);
-    const updateEntityScript = useSystemicStore(state => state.updateEntityScript);
 
-    const activeNode = entities[selectedEntityId];
+    // Filtrar entidades que tienen scripts activos o configuraciones lógicas avanzadas
+    const scriptedEntities = Object.entries(entities).filter(([_, data]) => data.scriptCode && data.scriptCode.trim() !== '');
+    const regularEntities = Object.entries(entities).filter(([_, data]) => !data.scriptCode || data.scriptCode.trim() === '');
 
-    const injectPipelineRoutine = (type) => {
-        if (!selectedEntityId) return;
-
-        let script = '';
-        if (type === 'ORBIT') {
-            script = `// PIPELINE: MOVIMIENTO ANGULAR CONTINUO EN XZ\nconst speed = 2.0; const radius = 5.0;\nent.x = ent.baseX + api.math.cos(api.time * speed) * radius;\nent.z = ent.baseZ + api.math.sin(api.time * speed) * radius;\n`;
-        } else if (type === 'WOBBLE') {
-            script = `// PIPELINE: FRECUENCIA VERTICAL SINOIDAL\nconst frequency = 4.5; const amplitude = 0.6;\nent.y = ent.baseY + api.math.sin(api.time * frequency) * amplitude;\n`;
-        } else if (type === 'COMBAT') {
-            script = `// PIPELINE: SISTEMA DE RANGO DE ATAQUE\nif (ent.collidingWith.length > 0) {\n    const target = api.getEntity(ent.collidingWith[0]);\n    if (target && target.faction !== ent.faction) {\n        // Rutina táctica hostil síncrona\n    }\n}\n`;
-        }
-
-        updateEntityScript(selectedEntityId, script);
-        if (worker) {
-            worker.postMessage({ type: 'INJECT_SCRIPT', payload: { id: selectedEntityId, code: script } });
-        }
+    const EntityRow = ({ id, data, hasScript }) => {
+        const isActive = selectedEntityId === id;
+        return (
+            <div
+                onClick={() => selectEntity(id)}
+                style={{
+                    padding: '8px 10px',
+                    background: isActive ? 'var(--accent-subtle)' : 'var(--bg-input)',
+                    border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    marginBottom: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'all 0.15s ease'
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: hasScript ? '#0071e3' : 'var(--border-strong)' }} />
+                    <span style={{ fontSize: '12px', fontWeight: isActive ? '600' : '500', color: isActive ? 'var(--accent)' : 'var(--text-main)' }}>
+                        {data.name}
+                    </span>
+                </div>
+                {hasScript && (
+                    <span style={{ fontSize: '10px', color: 'var(--accent)', background: 'var(--bg-panel)', padding: '2px 6px', borderRadius: '8px' }}>
+                        JS Activo
+                    </span>
+                )}
+            </div>
+        );
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%', overflowY: 'auto' }}>
 
-            {/* COMPONENTE 1: MONITOR DE TELEMETRÍA ULTRA-COMPACTO */}
-            <div style={{ background: '#09090f', borderRadius: '4px', border: '1px solid #14141f', overflow: 'hidden' }}>
-                <div style={{ fontSize: '9px', color: '#475569', fontWeight: 'bold', padding: '6px 8px 0 8px', fontFamily: 'monospace' }}>CORE_SIMULATION_TELEMETRY</div>
-                <TelemetryHUD worker={worker} />
-            </div>
-
-            {/* COMPONENTE 2: REGISTRO DE RUTINAS COMPILADAS */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#09090f', padding: '8px', borderRadius: '4px', border: '1px solid #14141f', minHeight: '120px' }}>
-                <div style={{ fontSize: '9px', color: '#475569', fontWeight: 'bold', marginBottom: '4px', fontFamily: 'monospace' }}>PIPELINE_BEHAVIOR_REGISTRY</div>
-                <div style={{ flex: 1, overflowY: 'auto', background: '#050508', padding: '2px', borderRadius: '3px', border: '1px solid #14141f' }}>
-                    {Object.keys(entities).map(id => {
-                        const hasScript = entities[id].scriptCode && entities[id].scriptCode.trim() !== '// COMPONENT_ROUTINE_SCRIPT\n' && entities[id].scriptCode.trim() !== '';
-                        const isSelected = selectedEntityId === id;
-
-                        return (
-                            <div
-                                key={id}
-                                onClick={() => selectEntity(id)}
-                                style={{
-                                    padding: '5px 6px', fontSize: '11px', cursor: 'pointer', borderRadius: '3px', marginBottom: '2px',
-                                    background: isSelected ? '#6366f112' : 'transparent',
-                                    color: isSelected ? '#6366f1' : '#94a3b8',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                    border: `1px solid ${isSelected ? '#6366f130' : 'transparent'}`
-                                }}
-                            >
-                                <span style={{ fontFamily: '"Fira Code", monospace' }}>{id}</span>
-                                <span style={{ fontSize: '8px', color: hasScript ? '#10b981' : '#475569', background: hasScript ? '#10b98110' : '#111116', padding: '1px 5px', borderRadius: '2px', border: `1px solid ${hasScript ? '#10b98125' : '#1c1c24'}` }}>
-                                    {hasScript ? "COMPILED_JS" : "STATIC"}
-                                </span>
-                            </div>
-                        );
-                    })}
+            {/* MONITOR DE ACTIVIDAD DEL KERNEL */}
+            <div style={{ background: 'var(--bg-panel)', padding: '12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: '600' }}>Monitor del Motor</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#34c759', fontWeight: '600' }}>
+                        <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: '#34c759', animation: 'pulse 2s infinite' }} />
+                        60 Hz
+                    </span>
                 </div>
-            </div>
 
-            {/* COMPONENTE 3: INYECTOR DE SISTEMAS PRE-COMPILADOS */}
-            {activeNode && (
-                <div style={{ background: '#09090f', padding: '8px', borderRadius: '4px', border: '1px solid #6366f140', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div style={{ fontSize: '9px', color: '#6366f1', fontWeight: 'bold', fontFamily: 'monospace' }}>QUICK_ROUTINE_BOILERPLATE_INJECTOR</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-                        <button onClick={() => injectPipelineRoutine('ORBIT')} style={{ padding: '5px', background: '#111116', border: '1px solid #1c1c24', color: '#fff', fontSize: '9px', fontFamily: 'monospace', cursor: 'pointer', borderRadius: '3px' }}>+ ORBIT_LOOP</button>
-                        <button onClick={() => injectPipelineRoutine('WOBBLE')} style={{ padding: '5px', background: '#111116', border: '1px solid #1c1c24', color: '#fff', fontSize: '9px', fontFamily: 'monospace', cursor: 'pointer', borderRadius: '3px' }}>+ WOBBLE_Y</button>
-                        <button onClick={() => injectPipelineRoutine('COMBAT')} style={{ padding: '5px', background: '#111116', border: '1px solid #1c1c24', color: '#fff', fontSize: '9px', fontFamily: 'monospace', cursor: 'pointer', borderRadius: '3px', gridColumn: 'span 2' }}>+ COMBAT_RANGE_SCANNER</button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ flex: 1, background: 'var(--bg-input)', padding: '8px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Memoria Compartida</span>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>128 KB</span>
+                    </div>
+                    <div style={{ flex: 1, background: 'var(--bg-input)', padding: '8px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Nodos Totales</span>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>{Object.keys(entities).length}</span>
                     </div>
                 </div>
-            )}
 
-            {/* COMPONENTE 4: CONTEXTO DE DIRECCIONAMIENTO BINARIO (SAB SCHEMA 2.0) */}
-            {activeNode && (
-                <div style={{ background: '#09090f', padding: '8px', borderRadius: '4px', border: '1px solid #6366f140', fontFamily: '"Fira Code", monospace', fontSize: '11px' }}>
-                    <div style={{ color: '#6366f1', fontWeight: 'bold', marginBottom: '4px', fontSize: '9px' }}>SHARED_ARRAY_BUFFER_POINTER</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: '#050508', padding: '6px', borderRadius: '3px', border: '1px solid #1c1c24' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#475569' }}>BYTE_OFFSET:</span> <span style={{ color: '#10b981', fontWeight: 'bold' }}>0x{(activeNode.index * 16 * 4).toString(16).toUpperCase()} byte</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#475569' }}>STRIDE_INDEX:</span> <span style={{ color: '#eab308', fontWeight: 'bold' }}>{activeNode.index} / 2000</span></div>
-                    </div>
+                <button style={{ width: '100%', padding: '6px', marginTop: '4px', background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: '500', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'background 0.2s' }}>
+                    Reiniciar Hilo Físico
+                </button>
+            </div>
+
+            {/* GESTOR DE ENTIDADES LÓGICAS */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+                <div style={{ overflowY: 'auto', paddingRight: '4px' }}>
+                    {scriptedEntities.length > 0 && (
+                        <>
+                            <SectionHeader title="Nodos con Lógica Inyectada" />
+                            {scriptedEntities.map(([id, data]) => (
+                                <EntityRow key={id} id={id} data={data} hasScript={true} />
+                            ))}
+                        </>
+                    )}
+
+                    <SectionHeader title="Nodos Estáticos" />
+                    {regularEntities.length === 0 ? (
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px 0' }}>No hay nodos estáticos.</div>
+                    ) : (
+                        regularEntities.map(([id, data]) => (
+                            <EntityRow key={id} id={id} data={data} hasScript={false} />
+                        ))
+                    )}
                 </div>
-            )}
+            </div>
+
+            <style>{`
+                @keyframes pulse {
+                    0% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.5; transform: scale(0.8); }
+                    100% { opacity: 1; transform: scale(1); }
+                }
+            `}</style>
         </div>
     );
 }

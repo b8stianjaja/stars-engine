@@ -20,13 +20,54 @@ function InspectorField({ value, onChange, label, step = 0.1 }) {
     };
 
     return (
-        <div style={{ flex: 1, display: 'flex', background: '#020204', border: '1px solid #12121a', borderRadius: '2px', alignItems: 'center', height: '18px', padding: '0 2px' }}>
-            <span style={{ fontSize: '8px', fontFamily: 'monospace', color: '#475569', fontWeight: 'bold', marginRight: '3px' }}>{label}</span>
-            <input type="text" value={local} onChange={(e) => setLocal(e.target.value)} onBlur={handleBlur} style={{ width: '100%', background: 'transparent', border: 'none', color: '#f1f5f9', fontSize: '9px', fontFamily: 'monospace', outline: 'none' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center' }}>
-                <button onClick={() => modify(step)} style={{ background: 'transparent', border: 'none', color: '#475569', fontSize: '5px', cursor: 'pointer', height: '8px', padding: 0 }}>▲</button>
-                <button onClick={() => modify(-step)} style={{ background: 'transparent', border: 'none', color: '#475569', fontSize: '5px', cursor: 'pointer', height: '8px', padding: 0 }}>▼</button>
+        <div style={{
+            flex: 1,
+            display: 'flex',
+            background: 'var(--bg-input)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            alignItems: 'center',
+            height: '26px',
+            padding: '0 8px',
+            justifyContent: 'space-between'
+        }}>
+            <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--text-secondary)' }}>{label}</span>
+            <input
+                type="text"
+                value={local}
+                onChange={(e) => setLocal(e.target.value)}
+                onBlur={handleBlur}
+                style={{
+                    width: '60%',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-main)',
+                    fontSize: '11px',
+                    textAlign: 'right',
+                    outline: 'none',
+                    fontWeight: '500'
+                }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', marginLeft: '4px' }}>
+                <button onClick={() => modify(step)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '7px', cursor: 'pointer', height: '10px', padding: 0 }}>▲</button>
+                <button onClick={() => modify(-step)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: '7px', cursor: 'pointer', height: '10px', padding: 0 }}>▼</button>
             </div>
+        </div>
+    );
+}
+
+function SectionHeader({ title }) {
+    return (
+        <div style={{
+            fontSize: '11px',
+            fontWeight: '600',
+            color: 'var(--text-secondary)',
+            letterSpacing: '0.3px',
+            textTransform: 'uppercase',
+            marginTop: '10px',
+            marginBottom: '4px'
+        }}>
+            {title}
         </div>
     );
 }
@@ -92,9 +133,15 @@ export function ArtistStudioPanel({ worker }) {
         if (freeIndices.length === 0) return;
         const nextIndex = freeIndices[freeIndices.length - 1];
         const id = `node_${type}_${Date.now().toString().slice(-4)}`;
+
+        let labelES = 'Bloque';
+        if (type === 'sphere') labelES = 'Esfera';
+        if (type === 'cylinder') labelES = 'Cilindro';
+        if (type === 'pyramid') labelES = 'Pirámide';
+
         const defaultData = {
-            index: nextIndex, name: `COLLIDER_${type.toUpperCase()}_${nextIndex}`, type, scale: [1, 1, 1],
-            color: '#475569', position: [0, 0.5, 0],
+            index: nextIndex, name: `${labelES} ${nextIndex}`, type, scale: [1, 1, 1],
+            color: '#8e8e93', position: [0, 0.5, 0],
             gameplay: { health: 100, maxHealth: 100, damage: 0, faction: 'neutral', inventory: [], animRow: 0, frameIndex: 0, actorState: 0 }
         };
         registerEntity(id, defaultData, 'hash_asset_default');
@@ -105,154 +152,171 @@ export function ArtistStudioPanel({ worker }) {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', height: '100%', overflowY: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', overflowY: 'hidden' }}>
 
-            {/* IO COMPACT ENGINE */}
-            <div style={{ display: 'flex', gap: '2px', background: '#07070a', padding: '3px', borderRadius: '3px', border: '1px solid #11111a' }}>
-                <button onClick={async () => await TauriBridge.saveScene({ entities, visuals, canvasLayers })} style={{ flex: 1, padding: '4px', background: '#1c0a15', border: '1px solid #3c122c', color: '#ff00aa', fontSize: '9px', fontFamily: 'monospace', cursor: 'pointer', fontWeight: 'bold' }}>EXPORT</button>
-                <button onClick={async () => { const d = await TauriBridge.loadScene(); if (d) { loadSceneState(d); if (worker) worker.postMessage({ type: 'LOAD_SCENE_LOGIC', payload: Object.values(d.entities) }); } }} style={{ flex: 1, padding: '4px', background: '#0a0a0f', border: '1px solid #161622', color: '#94a3b8', fontSize: '9px', fontFamily: 'monospace', cursor: 'pointer' }}>IMPORT</button>
-                <button onClick={toggleBlueprints} style={{ flex: 1.2, padding: '4px', fontSize: '9px', fontFamily: 'monospace', background: workspace.showBlueprints ? '#043425' : '#2d0a12', border: 'none', color: '#fff', cursor: 'pointer' }}>
-                    {workspace.showBlueprints ? "SCAFFOLD_ON" : "SCAFFOLD_OFF"}
+            {/* ALMACENAMIENTO DE PROYECTO */}
+            <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={async () => await TauriBridge.saveScene({ entities, visuals, canvasLayers })} style={{ flex: 1, padding: '7px', background: 'var(--bg-active)', border: 'none', color: 'var(--text-active)', fontSize: '11px', fontWeight: '600', borderRadius: 'var(--radius-sm)', cursor: 'pointer', boxShadow: 'var(--shadow-sm)' }}>Guardar</button>
+                <button onClick={async () => { const d = await TauriBridge.loadScene(); if (d) { loadSceneState(d); if (worker) worker.postMessage({ type: 'LOAD_SCENE_LOGIC', payload: Object.values(d.entities) }); } }} style={{ flex: 1, padding: '7px', background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Cargar</button>
+                <button onClick={toggleBlueprints} style={{ flex: 1.4, padding: '7px', fontSize: '11px', fontWeight: '500', background: workspace.showBlueprints ? 'var(--accent-subtle)' : 'var(--bg-input)', border: workspace.showBlueprints ? '1px solid var(--accent)' : '1px solid var(--border)', color: workspace.showBlueprints ? 'var(--accent)' : 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'all 0.2s' }}>
+                    {workspace.showBlueprints ? "Guías: Sí" : "Guías: No"}
                 </button>
             </div>
 
-            {/* MATRIZ DE CÁMARAS / NODOS DE ESCENA */}
-            <div style={{ background: '#07070a', padding: '3px', borderRadius: '3px', border: '1px solid #11111a', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1px' }}>
-                {Object.keys(workspace.cameraViews).map((id) => {
-                    const active = workspace.activeViewId === id;
-                    return (
-                        <button key={id} onClick={() => setView(id)} style={{ padding: '3px 0', background: active ? '#ff00aa1c' : '#0d0d14', border: `1px solid ${active ? '#ff00aa' : '#14141f'}`, color: active ? '#ff00aa' : '#52526b', borderRadius: '2px', fontSize: '8px', fontFamily: 'monospace', cursor: 'pointer' }}>
-                            {id.toUpperCase().slice(0, 4)}
-                        </button>
-                    );
-                })}
+            {/* VISTAS DE CÁMARA */}
+            <div>
+                <SectionHeader title="Cámaras de Trabajo" />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', background: 'var(--bg-input)', padding: '3px', borderRadius: 'var(--radius-md)' }}>
+                    {Object.keys(workspace.cameraViews).map((id) => {
+                        const active = workspace.activeViewId === id;
+                        const translations = { persp: 'Persp', front: 'Front', top: 'Sup', left: 'Izq', right: 'Der' };
+                        return (
+                            <button key={id} onClick={() => setView(id)} style={{ padding: '5px 0', background: active ? 'var(--bg-panel)' : 'transparent', border: 'none', color: active ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: active ? '600' : '500', borderRadius: 'var(--radius-sm)', fontSize: '11px', cursor: 'pointer', boxShadow: active ? 'var(--shadow-sm)' : 'none', transition: 'all 0.15s' }}>
+                                {translations[id] || id.toUpperCase()}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
-            {/* MÓDULO ILUSTRACIÓN DE CALCO EN PANTALLA (OVERLAY CONTROLLER) */}
-            <div style={{ background: '#07070a', padding: '5px', borderRadius: '3px', border: '1px solid #ff00aa33', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between' }}>
-                    <span style={{ fontSize: '8px', color: '#ff00aa', fontFamily: 'monospace', fontWeight: 'bold' }}>TRACE_DRAW_OVERLAY</span>
-                    <button onClick={() => setPaintMode(!layerPlayback.paintMode)} style={{ padding: '2px 6px', fontSize: '8px', fontFamily: 'monospace', background: layerPlayback.paintMode ? '#ff00aa' : '#111116', color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer', fontWeight: 'bold' }}>
-                        {layerPlayback.paintMode ? "OVERLAY_ON" : "OVERLAY_OFF"}
+            {/* ENTORNO DE DIBUJO E ILUSTRACIÓN */}
+            <div style={{ background: 'var(--bg-panel)', padding: '12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: '600' }}>Capa de Calco Manual</span>
+                    <button onClick={() => setPaintMode(!layerPlayback.paintMode)} style={{ padding: '4px 10px', fontSize: '11px', fontWeight: '600', background: layerPlayback.paintMode ? 'var(--bg-active)' : 'var(--bg-input)', color: layerPlayback.paintMode ? 'var(--text-active)' : 'var(--text-main)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'background 0.2s' }}>
+                        {layerPlayback.paintMode ? "Dibujo: Activo" : "Dibujo: Inactivo"}
                     </button>
                 </div>
-                <div style={{ display: 'flex', gap: '1px' }}>
-                    {['background', 'midground', 'foreground'].map(key => (
-                        <button key={key} onClick={() => setActiveLayerKey(key)} style={{ flex: 1, padding: '3px', fontSize: '8px', fontFamily: 'monospace', background: layerPlayback.activeLayerKey === key ? '#ff00aa' : '#0d0d14', color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer' }}>
-                            {key.toUpperCase().slice(0, 4)}
+
+                <div style={{ display: 'flex', background: 'var(--bg-input)', padding: '2px', borderRadius: 'var(--radius-md)' }}>
+                    {[['background', 'Fondo'], ['midground', 'Medio'], ['foreground', 'Frente']].map(([key, label]) => (
+                        <button key={key} onClick={() => setActiveLayerKey(key)} style={{ flex: 1, padding: '5px', fontSize: '11px', fontWeight: layerPlayback.activeLayerKey === key ? '600' : '500', background: layerPlayback.activeLayerKey === key ? 'var(--bg-panel)' : 'transparent', color: layerPlayback.activeLayerKey === key ? 'var(--accent)' : 'var(--text-secondary)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', boxShadow: layerPlayback.activeLayerKey === key ? 'var(--shadow-sm)' : 'none' }}>
+                            {label}
                         </button>
                     ))}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                    <button onClick={() => setTimelinePlaying(!timelinePlaying)} style={{ background: timelinePlaying ? '#ef4444' : '#10b981', color: '#fff', border: 'none', padding: '2px 5px', borderRadius: '2px', fontSize: '8px', cursor: 'pointer' }}>
-                        {timelinePlaying ? "■" : "▶"}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button onClick={() => setTimelinePlaying(!timelinePlaying)} style={{ background: timelinePlaying ? '#ff453a' : '#34c759', color: '#fff', border: 'none', width: '22px', height: '22px', borderRadius: '50%', fontSize: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {timelinePlaying ? "❙❙" : "▶"}
                     </button>
-                    <div style={{ flex: 1, display: 'flex', gap: '1px' }}>
+                    <div style={{ flex: 1, display: 'flex', gap: '3px' }}>
                         {Array.from({ length: 8 }).map((_, i) => {
                             const active = layerPlayback.currentFrameIndex === i;
                             const hasArt = canvasLayers[workspace.activeViewId]?.[layerPlayback.activeLayerKey]?.[i];
                             return (
-                                <div key={i} onClick={() => setGlobalFrameIndex(i)} style={{ flex: 1, height: '11px', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: active ? '#ff00aa' : (hasArt ? '#27273a' : '#11111a'), color: '#fff', fontFamily: 'monospace', borderRadius: '1px' }}>
-                                    {i}
+                                <div key={i} onClick={() => setGlobalFrameIndex(i)} style={{ flex: 1, height: '16px', fontSize: '10px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: active ? 'var(--bg-active)' : (hasArt ? 'var(--accent-subtle)' : 'var(--bg-input)'), color: active ? 'var(--text-active)' : (hasArt ? 'var(--accent)' : 'var(--text-secondary)'), borderRadius: '4px', border: active ? 'none' : '1px solid var(--border)', transition: 'all 0.15s' }}>
+                                    {i + 1}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
+
                 {layerPlayback.paintMode && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', background: '#020204', padding: '3px', borderRadius: '2px' }}>
-                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                            <input type="color" value={layerPlayback.brushColor} onChange={(e) => setBrushColor(e.target.value)} style={{ width: '16px', height: '14px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }} />
-                            <input type="range" min="2" max="24" value={layerPlayback.brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} style={{ flex: 1, accentColor: '#ff00aa', height: '2px' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--bg-input)', padding: '8px', borderRadius: 'var(--radius-md)', marginTop: '2px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <input type="color" value={layerPlayback.brushColor} onChange={(e) => setBrushColor(e.target.value)} style={{ width: '24px', height: '22px', border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }} />
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pincel:</span>
+                            <input type="range" min="2" max="24" value={layerPlayback.brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent)', height: '4px' }} />
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                            <span style={{ fontSize: '7px', color: '#475569', fontFamily: 'monospace' }}>SCAFFOLD_ALPHA:</span>
-                            <input type="range" min="0" max="1" step="0.1" value={layerPlayback.opacityGuide} onChange={(e) => setOpacityGuide(parseFloat(e.target.value))} style={{ width: '60px', accentColor: '#6366f1', height: '2px' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Opacidad de base:</span>
+                            <input type="range" min="0" max="1" step="0.1" value={layerPlayback.opacityGuide} onChange={(e) => setOpacityGuide(parseFloat(e.target.value))} style={{ width: '100px', accentColor: 'var(--accent)', height: '4px' }} />
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* MONTAJE DE COLLIDERS TRIDIDMENSIONALES */}
-            <div style={{ background: '#07070a', padding: '4px', borderRadius: '3px', border: '1px solid #11111a', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1px' }}>
-                    {[['box', '■'], ['pyramid', '▲'], ['sphere', '●'], ['cylinder', '⬢'], ['plane', '▬'], ['torus', '⌾']].map(([t, icon]) => (
-                        <button key={t} onClick={() => createPrefab(t)} title={`SPAWN_BLOCK_${t.toUpperCase()}`} style={{ padding: '3px 0', background: '#0d0d14', border: '1px solid #14141f', color: '#a1a1aa', fontSize: '9px', borderRadius: '2px', cursor: 'pointer' }}>
-                            {icon}
+            {/* MODELADO Y POSICIONAMIENTO TRIDIMENSIONAL */}
+            <div style={{ background: 'var(--bg-panel)', padding: '12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px', boxShadow: 'var(--shadow-sm)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: '600' }}>Objetos de Escena</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
+                    {[['box', 'Cubo'], ['pyramid', 'Pirámide'], ['sphere', 'Esfera'], ['cylinder', 'Cilindro'], ['plane', 'Plano'], ['torus', 'Toro']].map(([t, labelES]) => (
+                        <button key={t} onClick={() => createPrefab(t)} style={{ padding: '6px 0', background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'background 0.15s' }} onMouseEnter={(e) => e.target.style.background = 'var(--bg-input-hover)'} onMouseLeave={(e) => e.target.style.background = 'var(--bg-input)'}>
+                            {labelES}
                         </button>
                     ))}
                 </div>
-                <div style={{ display: 'flex', gap: '2px' }}>
-                    <button onClick={() => setTransformMode('translate')} style={{ flex: 1, padding: '3px 0', fontSize: '8px', fontFamily: 'monospace', background: workspace.transformMode === 'translate' ? '#ff00aa' : '#0d0d14', color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer' }}>[W] GIZMO_POS</button>
-                    <button onClick={() => setTransformMode('scale')} style={{ flex: 1, padding: '3px 0', fontSize: '8px', fontFamily: 'monospace', background: workspace.transformMode === 'scale' ? '#ff00aa' : '#0d0d14', color: '#fff', border: 'none', borderRadius: '2px', cursor: 'pointer' }}>[R] GIZMO_SCALE</button>
-                    <select value={workspace.snapValue} onChange={(e) => setSnapValue(parseFloat(e.target.value))} style={{ flex: 1, background: '#020204', border: '1px solid #14141f', color: '#ff00aa', fontSize: '8px', padding: '2px', borderRadius: '2px', fontFamily: 'monospace', outline: 'none' }}>
-                        <option value="0">SNAP_FREE</option>
-                        <option value="0.5">GRID_0.5m</option>
-                        <option value="1.0">GRID_1.0m</option>
+                <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                    <button onClick={() => setTransformMode('translate')} style={{ flex: 1, padding: '6px 0', fontSize: '11px', fontWeight: '600', background: workspace.transformMode === 'translate' ? 'var(--bg-active)' : 'var(--bg-input)', color: workspace.transformMode === 'translate' ? 'var(--text-active)' : 'var(--text-main)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Mover</button>
+                    <button onClick={() => setTransformMode('scale')} style={{ flex: 1, padding: '6px 0', fontSize: '11px', fontWeight: '600', background: workspace.transformMode === 'scale' ? 'var(--bg-active)' : 'var(--bg-input)', color: workspace.transformMode === 'scale' ? 'var(--text-active)' : 'var(--text-main)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Escalar</button>
+                    <select value={workspace.snapValue} onChange={(e) => setSnapValue(parseFloat(e.target.value))} style={{ flex: 1, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', padding: '4px', borderRadius: 'var(--radius-sm)', outline: 'none', cursor: 'pointer' }}>
+                        <option value="0">Libre</option>
+                        <option value="0.5">Rejilla 0.5m</option>
+                        <option value="1.0">Rejilla 1.0m</option>
                     </select>
                 </div>
             </div>
 
-            {/* SCENE GRAPH CON INSPECTOR PARAMÉTRICO DE ESTADOS DE ANIMACIÓN */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#07070a', padding: '4px', borderRadius: '3px', border: '1px solid #11111a', overflow: 'hidden' }}>
-                <div style={{ flex: selectedEntity ? 0.35 : 1, overflowY: 'auto', background: '#020204', padding: '2px', borderRadius: '2px' }}>
+            {/* LISTA E INSPECTOR DINÁMICO */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-panel)', padding: '12px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-main)', fontWeight: '600', marginBottom: '6px' }}>Árbol de Componentes</span>
+
+                <div style={{ flex: selectedEntity ? 0.35 : 1, overflowY: 'auto', background: 'var(--bg-input)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                     {Object.keys(entities).map(id => (
-                        <div key={id} onClick={() => selectEntity(id)} style={{ padding: '3px 4px', fontSize: '10px', fontFamily: 'monospace', cursor: 'pointer', borderRadius: '2px', marginBottom: '1px', background: workspace.selectedEntityId === id ? '#ff00aa15' : 'transparent', color: workspace.selectedEntityId === id ? '#ff00aa' : '#71717a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div key={id} onClick={() => selectEntity(id)} style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer', borderRadius: 'var(--radius-sm)', marginBottom: '3px', background: workspace.selectedEntityId === id ? 'var(--accent-subtle)' : 'transparent', color: workspace.selectedEntityId === id ? 'var(--accent)' : 'var(--text-main)', fontWeight: workspace.selectedEntityId === id ? '600' : '400', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.1s' }}>
                             <span>{entities[id].name}</span>
-                            <span onClick={(e) => { e.stopPropagation(); removeEntity(id); if (worker) worker.postMessage({ type: 'REMOVE_ENTITY_LOGIC', payload: { id } }); }} style={{ color: '#3f3f46', padding: '0 2px' }} onMouseOver={(e) => e.target.style.color = '#ef4444'} onMouseOut={(e) => e.target.style.color = '#3f3f46'}>[X]</span>
+                            <span onClick={(e) => { e.stopPropagation(); removeEntity(id); if (worker) worker.postMessage({ type: 'REMOVE_ENTITY_LOGIC', payload: { id } }); }} style={{ color: 'var(--text-secondary)', padding: '0 4px', fontSize: '11px', fontWeight: 'bold' }} onMouseOver={(e) => e.target.style.color = '#ff453a'} onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}>✕</span>
                         </div>
                     ))}
                 </div>
 
                 {selectedEntity && (
-                    <div style={{ flex: 0.65, borderTop: '1px solid #ff00aa33', paddingTop: '3px', marginTop: '3px', display: 'flex', flexDirection: 'column', gap: '3px', overflowY: 'auto' }}>
-                        <div style={{ display: 'flex', gap: '2px' }}>
-                            <input type="text" value={selectedEntity.name} onChange={(e) => updateEntityTransform(workspace.selectedEntityId, 'name', e.target.value)} style={{ flex: 1, background: '#020204', border: '1px solid #11111a', color: '#fff', fontSize: '9px', fontFamily: 'monospace', padding: '2px', borderRadius: '2px', outline: 'none' }} />
-                            <input type="color" value={selectedEntity.color} onChange={(e) => updateEntityTransform(workspace.selectedEntityId, 'color', e.target.value)} style={{ background: 'transparent', border: 'none', width: '16px', height: '14px', cursor: 'pointer', padding: 0 }} />
+                    <div style={{ flex: 0.65, borderTop: '1px solid var(--border)', paddingTop: '10px', marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
+                        {/* PROPIEDADES BÁSICAS */}
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <input type="text" value={selectedEntity.name} onChange={(e) => updateEntityTransform(workspace.selectedEntityId, 'name', e.target.value)} style={{ flex: 1, background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-main)', fontSize: '12px', fontWeight: '500', padding: '5px 8px', borderRadius: 'var(--radius-sm)', outline: 'none' }} />
+                            <div style={{ position: 'relative', width: '24px', height: '24px', borderRadius: '50%', background: selectedEntity.color, border: '2px solid var(--border-strong)', cursor: 'pointer', overflow: 'hidden', flexShrink: 0 }}>
+                                <input type="color" value={selectedEntity.color} onChange={(e) => updateEntityTransform(workspace.selectedEntityId, 'color', e.target.value)} style={{ position: 'absolute', top: -5, left: -5, width: 40, height: 40, background: 'transparent', border: 'none', cursor: 'pointer' }} />
+                            </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '2px' }}>
+
+                        {/* TRANSFORMADAS DE POSICIÓN */}
+                        <div style={{ display: 'flex', gap: '4px' }}>
                             {[0, 1, 2].map(i => (
                                 <InspectorField key={i} label={['X', 'Y', 'Z'][i]} value={selectedEntity.position[i]} onChange={(val) => handleTransformChange('position', i, val, selectedEntity.position)} />
                             ))}
                         </div>
 
-                        {/* MATRIZ DE CONFIGURACIÓN DE SPRITES PROGRAMABLES */}
-                        <div style={{ background: '#020204', padding: '3px', borderRadius: '2px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <div style={{ fontSize: '8px', color: '#ff00aa', fontFamily: 'monospace', fontWeight: 'bold' }}>GAMEPLAY_PAGING_INDEX</div>
-                            <div style={{ display: 'flex', gap: '2px' }}>
-                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#07070a', padding: '0 2px', height: '16px', borderRadius: '2px' }}>
-                                    <span style={{ fontSize: '7px', color: '#475569', fontFamily: 'monospace', marginRight: '2px' }}>ROW:</span>
-                                    <input type="number" value={selectedEntity.gameplay.animRow} onChange={(e) => handleGameplayChange('animRow', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: '#fff', fontSize: '8px', outline: 'none', fontFamily: 'monospace' }} />
+                        {/* AJUSTES GRÁFICOS DE SPRITE */}
+                        <div style={{ background: 'var(--bg-input)', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>Configuración de Animación (Sprite)</div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'var(--bg-panel)', padding: '0 6px', height: '24px', borderRadius: '4px', border: '1px solid var(--border)' }}>
+                                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginRight: '4px' }}>Fila:</span>
+                                    <input type="number" value={selectedEntity.gameplay.animRow} onChange={(e) => handleGameplayChange('animRow', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', outline: 'none' }} />
                                 </div>
-                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#07070a', padding: '0 2px', height: '16px', borderRadius: '2px' }}>
-                                    <span style={{ fontSize: '7px', color: '#475569', fontFamily: 'monospace', marginRight: '2px' }}>FRAME:</span>
-                                    <input type="number" value={selectedEntity.gameplay.frameIndex} onChange={(e) => handleGameplayChange('frameIndex', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: '#fff', fontSize: '8px', outline: 'none', fontFamily: 'monospace' }} />
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'var(--bg-panel)', padding: '0 6px', height: '24px', borderRadius: '4px', border: '1px solid var(--border)' }}>
+                                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginRight: '4px' }}>Frame:</span>
+                                    <input type="number" value={selectedEntity.gameplay.frameIndex} onChange={(e) => handleGameplayChange('frameIndex', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', outline: 'none' }} />
                                 </div>
-                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#07070a', padding: '0 2px', height: '16px', borderRadius: '2px' }}>
-                                    <span style={{ fontSize: '7px', color: '#475569', fontFamily: 'monospace', marginRight: '2px' }}>STATE:</span>
-                                    <input type="number" value={selectedEntity.gameplay.actorState} onChange={(e) => handleGameplayChange('actorState', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: '#fff', fontSize: '8px', outline: 'none', fontFamily: 'monospace' }} />
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: 'var(--bg-panel)', padding: '0 6px', height: '24px', borderRadius: '4px', border: '1px solid var(--border)' }}>
+                                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginRight: '4px' }}>Estado:</span>
+                                    <input type="number" value={selectedEntity.gameplay.actorState} onChange={(e) => handleGameplayChange('actorState', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', outline: 'none' }} />
                                 </div>
                             </div>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: '#020204', padding: '3px', borderRadius: '2px' }}>
+                        {/* ATRIBUTOS ADICIONALES */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-input)', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '8px', color: '#475569', fontFamily: 'monospace' }}>HEALTH:</span>
-                                <div style={{ display: 'flex', gap: '1px' }}>
-                                    <input type="number" value={selectedEntity.gameplay.health} onChange={(e) => handleGameplayChange('health', e.target.value)} style={{ width: '28px', background: '#07070a', border: '1px solid #11111a', color: '#00ff66', fontSize: '8px', textAlign: 'center', outline: 'none' }} />
-                                    <input type="number" value={selectedEntity.gameplay.maxHealth} onChange={(e) => handleGameplayChange('maxHealth', e.target.value)} style={{ width: '28px', background: '#07070a', border: '1px solid #11111a', color: '#475569', fontSize: '8px', textAlign: 'center', outline: 'none' }} />
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Puntos de Vida:</span>
+                                <div style={{ display: 'flex', gap: '2px' }}>
+                                    <input type="number" value={selectedEntity.gameplay.health} onChange={(e) => handleGameplayChange('health', e.target.value)} style={{ width: '32px', background: 'var(--bg-panel)', border: '1px solid var(--border)', color: '#34c759', fontSize: '11px', fontWeight: '600', textAlign: 'center', borderRadius: '4px', padding: '2px 0', outline: 'none' }} />
+                                    <input type="number" value={selectedEntity.gameplay.maxHealth} onChange={(e) => handleGameplayChange('maxHealth', e.target.value)} style={{ width: '32px', background: 'var(--bg-panel)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: '11px', textAlign: 'center', borderRadius: '4px', padding: '2px 0', outline: 'none' }} />
                                 </div>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '8px', color: '#475569', fontFamily: 'monospace' }}>DMG:</span>
-                                <input type="number" value={selectedEntity.gameplay.damage} onChange={(e) => handleGameplayChange('damage', e.target.value)} style={{ width: '57px', background: '#07070a', border: '1px solid #11111a', color: '#ef4444', fontSize: '8px', textAlign: 'center', outline: 'none' }} />
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Fuerza / Daño:</span>
+                                <input type="number" value={selectedEntity.gameplay.damage} onChange={(e) => handleGameplayChange('damage', e.target.value)} style={{ width: '66px', background: 'var(--bg-panel)', border: '1px solid var(--border)', color: '#ff3b30', fontSize: '11px', fontWeight: '600', textAlign: 'center', borderRadius: '4px', padding: '2px 0', outline: 'none' }} />
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '8px', color: '#475569', fontFamily: 'monospace' }}>FACTION:</span>
-                                <select value={selectedEntity.gameplay.faction} onChange={(e) => handleGameplayChange('faction', e.target.value)} style={{ width: '57px', background: '#07070a', border: '1px solid #11111a', color: '#eab308', fontSize: '8px', outline: 'none', cursor: 'pointer' }}>
-                                    <option value="player">PLAYER</option>
-                                    <option value="enemy">ENEMY</option>
-                                    <option value="neutral">NEUTRAL</option>
+                                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Bando / Facción:</span>
+                                <select value={selectedEntity.gameplay.faction} onChange={(e) => handleGameplayChange('faction', e.target.value)} style={{ width: '80px', background: 'var(--bg-panel)', border: '1px solid var(--border)', color: 'var(--text-main)', fontSize: '11px', fontWeight: '500', outline: 'none', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}>
+                                    <option value="player">Jugador</option>
+                                    <option value="enemy">Enemigo</option>
+                                    <option value="neutral">Neutral</option>
                                 </select>
                             </div>
                         </div>

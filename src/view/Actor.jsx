@@ -1,110 +1,76 @@
-import { useRef, useMemo, useState, useEffect } from 'react';
+import { forwardRef, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useSystemicStore } from '../core/engine.store';
-import { Edges, TransformControls } from '@react-three/drei';
+import { Box, Sphere, Cylinder, Cone, Plane, Torus } from '@react-three/drei';
 
-export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
-    const meshRef = useRef();
-    const isDraggingRef = useRef(false);
-    const settleFramesRef = useRef(0);
-    const [hovered, setHovered] = useState(false);
+export const Actor = forwardRef(({ entity, sharedBuffer, isSelected, onClick }, ref) => {
+    const localRef = useRef(null);
 
-    const floatView = useMemo(() => new Float32Array(sharedBuffer), [sharedBuffer]);
+    // Fusión segura de referencias para R3F
+    const setRefs = (element) => {
+        localRef.current = element;
+        if (typeof ref === 'function') ref(element);
+        else if (ref) ref.current = element;
+    };
 
-    const entityData = useSystemicStore((state) => state.entities[id]);
-    const selectedEntityId = useSystemicStore((state) => state.workspace.selectedEntityId);
-    const showBlueprints = useSystemicStore((state) => state.workspace.showBlueprints);
-    const transformMode = useSystemicStore((state) => state.workspace.transformMode);
-    const snapValue = useSystemicStore((state) => state.workspace.snapValue);
+    useFrame(({ camera }) => {
+        if (!sharedBuffer || !localRef.current) return;
 
-    const selectEntity = useSystemicStore((state) => state.selectEntity);
-    const updateEntityTransform = useSystemicStore((state) => state.updateEntityTransform);
+        // FIX 1: Verificamos correctamente la cámara (no el parent de la malla)
+        if (isSelected && camera.userData?.isDraggingGizmo) return;
 
-    const isSelected = selectedEntityId === id;
+        const floatArray = new Float32Array(sharedBuffer);
+        const offset = entity.index * 16;
 
-    const STRIDE = 16;
-    const P_X = 0, P_Y = 1, P_Z = 2;
-    const S_X = 6, S_Y = 7, S_Z = 8;
-    const ROT = 9;
+        // FIX 2: Si la memoria del Kernel aún no arranca, ignoramos el ciclo
+        if (isNaN(floatArray[offset + 0])) return;
 
-    useEffect(() => {
-        return () => {
-            if (isSelected && gizmoRef.current) gizmoRef.current = null;
-        };
-    }, [isSelected, gizmoRef]);
+        localRef.current.position.set(
+            floatArray[offset + 0],
+            floatArray[offset + 1],
+            floatArray[offset + 2]
+        );
 
-    useFrame(() => {
-        if (!meshRef.current || !entityData || !floatView) return;
-        const offset = entityData.index * STRIDE;
-
-        if (isDraggingRef.current || settleFramesRef.current > 0) {
-            floatView[offset + P_X] = meshRef.current.position.x;
-            floatView[offset + P_Y] = meshRef.current.position.y;
-            floatView[offset + P_Z] = meshRef.current.position.z;
-            floatView[offset + S_X] = meshRef.current.scale.x;
-            floatView[offset + S_Y] = meshRef.current.scale.y;
-            floatView[offset + S_Z] = meshRef.current.scale.z;
-
-            if (settleFramesRef.current > 0) settleFramesRef.current--;
-        } else {
-            meshRef.current.position.set(floatView[offset + P_X], floatView[offset + P_Y], floatView[offset + P_Z]);
-            meshRef.current.scale.set(floatView[offset + S_X], floatView[offset + S_Y], floatView[offset + S_Z]);
-            meshRef.current.rotation.y = floatView[offset + ROT];
-        }
+        localRef.current.scale.set(
+            floatArray[offset + 6] !== 0 ? floatArray[offset + 6] : entity.scale[0],
+            floatArray[offset + 7] !== 0 ? floatArray[offset + 7] : entity.scale[1],
+            floatArray[offset + 8] !== 0 ? floatArray[offset + 8] : entity.scale[2]
+        );
     });
 
-    if (!entityData) return null;
+    const materialProps = {
+        color: entity.color || '#8e8e93',
+        roughness: 0.4,
+        metalness: 0.1,
+        emissive: isSelected ? '#0071e3' : '#000000',
+        emissiveIntensity: isSelected ? 0.3 : 0
+    };
+
+    // FIX 3: Retorno funcional en vez de Componente, evita desmontajes destructivos
+    const renderGeometry = () => {
+        switch (entity.type) {
+            case 'sphere': return <Sphere args={[0.5, 32, 32]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Sphere>;
+            case 'cylinder': return <Cylinder args={[0.5, 0.5, 1, 32]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Cylinder>;
+            case 'pyramid': return <Cone args={[0.5, 1, 4]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Cone>;
+            case 'plane': return <Plane args={[1, 1]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow><meshStandardMaterial {...materialProps} /></Plane>;
+            case 'torus': return <Torus args={[0.5, 0.2, 16, 32]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Torus>;
+            case 'box':
+            default:
+                return <Box args={[1, 1, 1]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Box>;
+        }
+    };
+
+    // Valores iniciales seguros
+    const pos = [entity.position[0], entity.position[1], entity.position[2]];
+    const sca = [entity.scale[0], entity.scale[1], entity.scale[2]];
 
     return (
-        <>
-            <mesh
-                ref={meshRef}
-                scale={entityData.scale}
-                position={entityData.position}
-                onPointerOver={(e) => { e.stopPropagation(); if (!gizmoRef.current?.axis) setHovered(true); }}
-                onPointerOut={() => setHovered(false)}
-                onPointerDown={(e) => { e.stopPropagation(); if (!gizmoRef.current?.axis) selectEntity(id); }}
-                castShadow receiveShadow
-            >
-                {entityData.type === 'box' && <boxGeometry args={[1, 1, 1]} />}
-                {entityData.type === 'pyramid' && <coneGeometry args={[0.707, 1, 4]} />}
-                {entityData.type === 'sphere' && <sphereGeometry args={[0.5, 32, 32]} />}
-                {entityData.type === 'cylinder' && <cylinderGeometry args={[0.5, 0.5, 1, 32]} />}
-                {entityData.type === 'plane' && <planeGeometry args={[1, 1]} />}
-                {entityData.type === 'torus' && <torusGeometry args={[0.4, 0.12, 16, 64]} />}
-
-                <meshStandardMaterial color={entityData.color} metalness={isSelected ? 0.4 : 0.15} roughness={isSelected ? 0.3 : 0.6} wireframe={!showBlueprints} transparent opacity={isSelected ? 0.85 : 1.0} />
-                {showBlueprints && <Edges threshold={15} color={isSelected ? "#ff00aa" : hovered ? "#6366f1" : "#475569"} thickness={isSelected ? 2.5 : 1.5} />}
-            </mesh>
-
+        <group ref={setRefs} onClick={onClick} position={pos} scale={sca}>
             {isSelected && (
-                <TransformControls
-                    ref={(instance) => { if (instance) gizmoRef.current = instance; }}
-                    object={meshRef} mode={transformMode}
-                    translationSnap={snapValue > 0 && transformMode === 'translate' ? snapValue : null}
-                    scaleSnap={snapValue > 0 && transformMode === 'scale' ? snapValue : null}
-                    size={0.8}
-                    onMouseDown={() => { isDraggingRef.current = true; }}
-                    onMouseUp={() => {
-                        isDraggingRef.current = false;
-                        settleFramesRef.current = 10;
-                        const fPos = [meshRef.current.position.x, meshRef.current.position.y, meshRef.current.position.z];
-                        const fScale = [meshRef.current.scale.x, meshRef.current.scale.y, meshRef.current.scale.z];
-
-                        updateEntityTransform(id, 'position', fPos);
-                        updateEntityTransform(id, 'scale', fScale);
-
-                        if (worker) {
-                            worker.postMessage({ type: 'UPDATE_PHYSICAL_POS', payload: { id, x: fPos[0], y: fPos[1], z: fPos[2], scaleX: fScale[0], scaleY: fScale[1], scaleZ: fScale[2] } });
-                        }
-                    }}
-                    onChange={() => {
-                        if (isDraggingRef.current && transformMode === 'translate' && worker) {
-                            worker.postMessage({ type: 'UPDATE_PHYSICAL_POS', payload: { id, x: meshRef.current.position.x, y: meshRef.current.position.y, z: meshRef.current.position.z } });
-                        }
-                    }}
-                />
+                <Box args={[1.02, 1.02, 1.02]}>
+                    <meshBasicMaterial color="#0071e3" wireframe opacity={0.5} transparent />
+                </Box>
             )}
-        </>
+            {renderGeometry()}
+        </group>
     );
-}
+});

@@ -3,105 +3,116 @@ import { useSystemicStore } from '../../core/engine.store';
 import { ArtistStudioPanel } from './ArtistStudioPanel';
 import { DeveloperStudioPanel } from './DeveloperStudioPanel';
 
-export function WorkspaceSidebar({ worker }) {
+export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
     const studioMode = useSystemicStore(useShallow(state => state.workspace.studioMode));
     const setStudioMode = useSystemicStore(state => state.setStudioMode);
 
     return (
         <div style={{
-            width: '320px',
+            width: '340px',
             height: '100vh',
-            background: '#030305',
-            borderRight: '1px solid #14141f',
-            padding: '12px',
+            background: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border)',
+            padding: '20px 16px',
             boxSizing: 'border-box',
-            color: '#e2e8f0',
-            fontFamily: '"Inter", sans-serif',
+            color: 'var(--text-main)',
+            fontFamily: 'var(--font-sans)',
             zIndex: 100,
             display: 'flex',
             flexDirection: 'column',
-            gap: '12px',
+            gap: '16px',
             flexShrink: 0,
-            userSelect: 'none'
+            userSelect: 'none',
+            boxShadow: 'var(--shadow-md)',
+            transition: 'background 0.3s, border-color 0.3s'
         }}>
-            {/* ENCABEZADO ESTRUCTURAL */}
+            {/* ENCABEZADO MINIMALISTA */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                borderBottom: '1px solid #14141f',
-                paddingBottom: '8px'
+                paddingBottom: '2px'
             }}>
-                <span style={{
-                    fontSize: '10px',
-                    letterSpacing: '2px',
-                    color: '#6366f1',
-                    fontWeight: 'bold',
-                    fontFamily: '"Fira Code", monospace'
-                }}>
-                    STARS_ENGINE // SYSTEM_IDE
-                </span>
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: '#09090f',
-                    padding: '2px 6px',
-                    borderRadius: '3px',
-                    border: '1px solid #14141f'
-                }}>
-                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#10b981' }} />
-                    <span style={{ fontSize: '8px', fontFamily: '"Fira Code", monospace', color: '#10b981', fontWeight: 'bold' }}>CORE_ONLINE</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
+                    <span style={{
+                        fontSize: '15px',
+                        fontWeight: '600',
+                        letterSpacing: '-0.3px',
+                        color: 'var(--text-main)'
+                    }}>
+                        Estudio de Arte
+                    </span>
                 </div>
+
+                <button
+                    onClick={toggleTheme}
+                    style={{
+                        background: 'var(--bg-input)',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '28px',
+                        height: '28px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'var(--text-main)',
+                        fontSize: '13px',
+                        transition: 'background 0.2s'
+                    }}
+                >
+                    {isDark ? '☀️' : '🌙'}
+                </button>
             </div>
 
-            {/* CONMUTADOR DE ROL PROFESIONAL */}
+            {/* CONTROL SEGMENTADO TIPO APPLE */}
             <div style={{
                 display: 'flex',
-                background: '#09090f',
+                background: 'var(--bg-input)',
                 padding: '2px',
-                borderRadius: '4px',
-                border: '1px solid #14141f'
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border)'
             }}>
                 <button
                     onClick={() => setStudioMode('design')}
                     style={{
                         flex: 1,
-                        padding: '6px 0',
-                        fontSize: '10px',
-                        borderRadius: '3px',
+                        padding: '7px 0',
+                        fontSize: '12px',
+                        borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         border: 'none',
-                        background: studioMode === 'design' ? '#ff00aa' : 'transparent',
-                        color: studioMode === 'design' ? '#fff' : '#475569',
-                        fontFamily: '"Fira Code", monospace',
-                        fontWeight: 'bold',
-                        transition: 'all 0.12s ease-in-out'
+                        background: studioMode === 'design' ? 'var(--bg-panel)' : 'transparent',
+                        color: studioMode === 'design' ? 'var(--text-main)' : 'var(--text-secondary)',
+                        fontWeight: studioMode === 'design' ? '600' : '500',
+                        transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+                        boxShadow: studioMode === 'design' ? 'var(--shadow-sm)' : 'none'
                     }}
                 >
-                    SCENE_DESIGN
+                    Diseño Visual
                 </button>
                 <button
                     onClick={() => setStudioMode('logic')}
                     style={{
                         flex: 1,
-                        padding: '6px 0',
-                        fontSize: '10px',
-                        borderRadius: '3px',
+                        padding: '7px 0',
+                        fontSize: '12px',
+                        borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         border: 'none',
-                        background: studioMode === 'logic' ? '#6366f1' : 'transparent',
-                        color: studioMode === 'logic' ? '#fff' : '#475569',
-                        fontFamily: '"Fira Code", monospace',
-                        fontWeight: 'bold',
-                        transition: 'all 0.12s ease-in-out'
+                        background: studioMode === 'logic' ? 'var(--bg-panel)' : 'transparent',
+                        color: studioMode === 'logic' ? 'var(--text-main)' : 'var(--text-secondary)',
+                        fontWeight: studioMode === 'logic' ? '600' : '500',
+                        transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+                        boxShadow: studioMode === 'logic' ? 'var(--shadow-sm)' : 'none'
                     }}
                 >
-                    SYSTEM_LOGIC
+                    Lógica
                 </button>
             </div>
 
-            {/* CONTENEDOR OPERATIVO */}
+            {/* AREA OPERATIVA */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {studioMode === 'design' ? (
                     <ArtistStudioPanel worker={worker} />
