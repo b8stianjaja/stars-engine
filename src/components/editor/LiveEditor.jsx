@@ -5,10 +5,11 @@ import { TauriBridge } from '../../core/bridge/bridge.tauri';
 
 export function LiveEditor({ worker }) {
     const selectedEntityId = useSystemicStore(state => state.workspace.selectedEntityId);
-    const entities = useSystemicStore(state => state.entities);
+
+    // MUTACIÓN ARQUITECTÓNICA: Suscripción quirúrgica a una sola entidad.
+    const activeEntity = useSystemicStore(state => state.entities[selectedEntityId]);
     const updateEntityScript = useSystemicStore(state => state.updateEntityScript);
 
-    const activeEntity = entities[selectedEntityId];
     const [localCode, setLocalCode] = useState('');
     const [scriptStatus, setScriptStatus] = useState({ status: 'IDLE', error: null });
     const editorRef = useRef(null);

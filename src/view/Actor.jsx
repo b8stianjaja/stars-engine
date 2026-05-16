@@ -1,76 +1,131 @@
-import { forwardRef, useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Box, Sphere, Cylinder, Cone, Plane, Torus } from '@react-three/drei';
+import { Box, Sphere, Cylinder, Cone, Plane, Torus, useTexture } from '@react-three/drei';
+import { useSystemicStore } from '../core/engine.store';
+import heroAsset from '../assets/hero.png';
 
-export const Actor = forwardRef(({ entity, sharedBuffer, isSelected, onClick }, ref) => {
+const SpriteRenderer = ({ color }) => {
+    const texture = useTexture(heroAsset);
+    return (
+        <Plane args={[1, 1.5]} castShadow receiveShadow>
+            <meshStandardMaterial
+                map={texture}
+                color={color || '#ffffff'}
+                transparent={true}
+                alphaTest={0.5}
+                side={2}
+            />
+        </Plane>
+    );
+};
+
+export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTransformTarget, worker }) => {
     const localRef = useRef(null);
 
-    // Fusión segura de referencias para R3F
-    const setRefs = (element) => {
-        localRef.current = element;
-        if (typeof ref === 'function') ref(element);
-        else if (ref) ref.current = element;
-    };
+    const entity = useSystemicStore(state => state.entities[id]);
+    const selectEntity = useSystemicStore(state => state.selectEntity);
+    const studioMode = useSystemicStore(state => state.workspace.studioMode);
+    const cameraLocked = useSystemicStore(state => state.workspace.cameraLocked);
 
-    useFrame(({ camera }) => {
-        if (!sharedBuffer || !localRef.current) return;
+    useEffect(() => {
+        if (isSelected && setTransformTarget) setTransformTarget(localRef.current);
+    }, [isSelected, setTransformTarget]);
 
-        // FIX 1: Verificamos correctamente la cámara (no el parent de la malla)
-        if (isSelected && camera.userData?.isDraggingGizmo) return;
+    useFrame(() => {
+        if (!globalFloatView || !localRef.current || !entity) return;
+        if (isSelected && isDraggingRef.current) return;
 
-        const floatArray = new Float32Array(sharedBuffer);
         const offset = entity.index * 16;
-
-        // FIX 2: Si la memoria del Kernel aún no arranca, ignoramos el ciclo
-        if (isNaN(floatArray[offset + 0])) return;
+        if (isNaN(globalFloatView[offset + 0])) return;
 
         localRef.current.position.set(
-            floatArray[offset + 0],
-            floatArray[offset + 1],
-            floatArray[offset + 2]
+            globalFloatView[offset + 0],
+            globalFloatView[offset + 1],
+            globalFloatView[offset + 2]
         );
 
+        if (entity.type === 'sprite') {
+            localRef.current.quaternion.set(0, 0, 0, 1);
+        } else {
+            localRef.current.quaternion.set(
+                globalFloatView[offset + 3] ?? 0,
+                globalFloatView[offset + 4] ?? 0,
+                globalFloatView[offset + 5] ?? 0,
+                globalFloatView[offset + 6] ?? 1
+            );
+        }
+
         localRef.current.scale.set(
-            floatArray[offset + 6] !== 0 ? floatArray[offset + 6] : entity.scale[0],
-            floatArray[offset + 7] !== 0 ? floatArray[offset + 7] : entity.scale[1],
-            floatArray[offset + 8] !== 0 ? floatArray[offset + 8] : entity.scale[2]
+            globalFloatView[offset + 7] !== 0 ? globalFloatView[offset + 7] : entity.scale[0],
+            globalFloatView[offset + 8] !== 0 ? globalFloatView[offset + 8] : entity.scale[1],
+            globalFloatView[offset + 9] !== 0 ? globalFloatView[offset + 9] : entity.scale[2]
         );
     });
 
-    const materialProps = {
-        color: entity.color || '#8e8e93',
-        roughness: 0.4,
-        metalness: 0.1,
-        emissive: isSelected ? '#0071e3' : '#000000',
-        emissiveIntensity: isSelected ? 0.3 : 0
+    if (!entity) return null;
+
+    const isDesignMode = studioMode === 'design';
+
+    const getMaterial = () => {
+        if (entity.isGhostMask && (!isDesignMode || cameraLocked)) {
+            return <meshBasicMaterial colorWrite={false} depthWrite={true} />;
+        }
+        return (
+            <meshStandardMaterial
+                color={entity.color || '#8e8e93'}
+                roughness={0.5}
+                transparent={entity.isGhostMask}
+                opacity={entity.isGhostMask ? 0.3 : 1}
+                emissive={isSelected ? '#0071e3' : '#000000'}
+                emissiveIntensity={isSelected ? 0.3 : 0}
+            />
+        );
     };
 
-    // FIX 3: Retorno funcional en vez de Componente, evita desmontajes destructivos
     const renderGeometry = () => {
+        if (entity.type === 'sprite') {
+            return <SpriteRenderer color={entity.color} />;
+        }
+
+        const material = getMaterial();
         switch (entity.type) {
-            case 'sphere': return <Sphere args={[0.5, 32, 32]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Sphere>;
-            case 'cylinder': return <Cylinder args={[0.5, 0.5, 1, 32]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Cylinder>;
-            case 'pyramid': return <Cone args={[0.5, 1, 4]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Cone>;
-            case 'plane': return <Plane args={[1, 1]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow><meshStandardMaterial {...materialProps} /></Plane>;
-            case 'torus': return <Torus args={[0.5, 0.2, 16, 32]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Torus>;
+            case 'sphere': return <Sphere args={[0.5, 32, 32]} castShadow receiveShadow>{material}</Sphere>;
+            case 'cylinder': return <Cylinder args={[0.5, 0.5, 1, 32]} castShadow receiveShadow>{material}</Cylinder>;
+            case 'pyramid': return <Cone args={[0.5, 1, 4]} castShadow receiveShadow>{material}</Cone>;
+            case 'plane': return <Plane args={[1, 1]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>{material}</Plane>;
+            case 'torus': return <Torus args={[0.5, 0.2, 16, 32]} castShadow receiveShadow>{material}</Torus>;
             case 'box':
-            default:
-                return <Box args={[1, 1, 1]} castShadow receiveShadow><meshStandardMaterial {...materialProps} /></Box>;
+            default: return <Box args={[1, 1, 1]} castShadow receiveShadow>{material}</Box>;
         }
     };
 
-    // Valores iniciales seguros
-    const pos = [entity.position[0], entity.position[1], entity.position[2]];
-    const sca = [entity.scale[0], entity.scale[1], entity.scale[2]];
+    const handleClick = (e) => {
+        e.stopPropagation();
+
+        if (isDesignMode && !cameraLocked) {
+            if (!isDraggingRef.current) selectEntity(id);
+        } else {
+            // Despacho limpio y encapsulado del Point & Click hacia el Kernel
+            if (worker) {
+                worker.postMessage({
+                    type: 'SPATIAL_CLICK',
+                    payload: { id: id, point: { x: e.point.x, y: e.point.y, z: e.point.z } }
+                });
+            }
+        }
+    };
+
+    const pos = [entity.position?.[0] ?? 0, entity.position?.[1] ?? 0, entity.position?.[2] ?? 0];
+    const sca = [entity.scale?.[0] ?? 1, entity.scale?.[1] ?? 1, entity.scale?.[2] ?? 1];
 
     return (
-        <group ref={setRefs} onClick={onClick} position={pos} scale={sca}>
-            {isSelected && (
-                <Box args={[1.02, 1.02, 1.02]}>
-                    <meshBasicMaterial color="#0071e3" wireframe opacity={0.5} transparent />
+        <group ref={localRef} onClick={handleClick} position={pos} scale={sca}>
+            {isSelected && isDesignMode && !cameraLocked && (
+                <Box args={[1.04, 1.04, 1.04]}>
+                    <meshBasicMaterial color="#0071e3" wireframe opacity={0.6} transparent />
                 </Box>
             )}
             {renderGeometry()}
         </group>
     );
-});
+};
