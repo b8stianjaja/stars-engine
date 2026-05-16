@@ -66,7 +66,13 @@ export function Actor({ id, sharedBuffer, worker, gizmoRef }) {
                 onPointerDown={(e) => { e.stopPropagation(); if (!gizmoRef.current?.axis) selectEntity(id); }}
                 castShadow receiveShadow
             >
-                {entityData.type === 'pyramid' ? <coneGeometry args={[0.707, 1, 4]} /> : <boxGeometry args={[1, 1, 1]} />}
+                {entityData.type === 'box' && <boxGeometry args={[1, 1, 1]} />}
+                {entityData.type === 'pyramid' && <coneGeometry args={[0.707, 1, 4]} />}
+                {entityData.type === 'sphere' && <sphereGeometry args={[0.5, 32, 32]} />}
+                {entityData.type === 'cylinder' && <cylinderGeometry args={[0.5, 0.5, 1, 32]} />}
+                {entityData.type === 'plane' && <planeGeometry args={[1, 1]} />}
+                {entityData.type === 'torus' && <torusGeometry args={[0.4, 0.12, 16, 64]} />}
+
                 <meshStandardMaterial color={entityData.color} metalness={isSelected ? 0.4 : 0.15} roughness={isSelected ? 0.3 : 0.6} wireframe={!showBlueprints} transparent opacity={isSelected ? 0.85 : 1.0} />
                 {showBlueprints && <Edges threshold={15} color={isSelected ? "#ff00aa" : hovered ? "#6366f1" : "#475569"} thickness={isSelected ? 2.5 : 1.5} />}
             </mesh>

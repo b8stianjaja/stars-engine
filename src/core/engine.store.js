@@ -3,21 +3,35 @@ import { create } from 'zustand';
 export const useSystemicStore = create((set) => ({
     entities: {},
     visuals: {},
-    canvasLayers: {},
+    // Matriz Estructurada: canvasLayers[viewId][layerKey] = [base64Frame0, base64Frame1, ...]
+    canvasLayers: {
+        free: { background: [], midground: [], foreground: [] },
+        isometric: { background: [], midground: [], foreground: [] },
+        top: { background: [], midground: [], foreground: [] },
+        front: { background: [], midground: [], foreground: [] },
+        right: { background: [], midground: [], foreground: [] }
+    },
+    // Controladores de reproducción de animación para las capas del artista
+    layerPlayback: {
+        activeLayerKey: 'background',
+        currentFrameIndex: 0
+    },
     freeIndices: Array.from({ length: 2000 }, (_, i) => 1999 - i),
 
     workspace: {
-        studioMode: 'design',     // 'design' o 'logic'
-        playMode: 'edit',         // 'edit' o 'play'
+        studioMode: 'design',
+        playMode: 'edit',
         activeViewId: 'free',
         showBlueprints: true,
         selectedEntityId: null,
         transformMode: 'translate',
         snapValue: 0.5,
         cameraViews: {
-            free: { name: "WORKSPACE_FREE_CAMERA", position: [10, 10, 10], target: [0, 0, 0] },
-            isometric: { name: "CAD_ISOMETRIC_VIEW", position: [12, 12, 12], target: [0, 0, 0], fov: 25 },
-            paint_canvas: { name: "TOP_DOWN_PAINT_PLANE", position: [0, 25, 0], target: [0, 0, 0], fov: 40 }
+            free: { name: "PERSPECTIVE_FREE_VIEW", position: [10, 10, 10], target: [0, 0, 0], isFixed: false, orientation: 'horizontal', offset: 0.005 },
+            isometric: { name: "CAD_ISOMETRIC_VIEW", position: [12, 12, 12], target: [0, 0, 0], fov: 25, isFixed: false, orientation: 'horizontal', offset: 0.005 },
+            top: { name: "ORTHO_TOP_MAP (Y+)", position: [0, 25, 0], target: [0, 0, 0], fov: 40, isFixed: true, orientation: 'horizontal', offset: 0.01 },
+            front: { name: "ORTHO_FRONT_WALL (Z+)", position: [0, 0, 25], target: [0, 0, 0], fov: 40, isFixed: true, orientation: 'vertical-z', offset: 0.01 },
+            right: { name: "ORTHO_RIGHT_WALL (X+)", position: [25, 0, 0], target: [0, 0, 0], fov: 40, isFixed: true, orientation: 'vertical-x', offset: 0.01 }
         }
     },
 
@@ -29,8 +43,29 @@ export const useSystemicStore = create((set) => ({
         workspace: { ...state.workspace, playMode: mode }
     })),
 
-    updateLayerAsset: (layerKey, base64Data) => set((state) => ({
-        canvasLayers: { ...state.canvasLayers, [layerKey]: base64Data }
+    // Mutación Quirúrgica de Cuadros de Animación 2D para Diseñadores y Desarrolladores
+    updateLayerAssetFrame: (viewId, layerKey, frameIndex, base64Data) => set((state) => {
+        const viewLayers = state.canvasLayers[viewId] || { background: [], midground: [], foreground: [] };
+        const currentFrames = [...(viewLayers[layerKey] || [])];
+        currentFrames[frameIndex] = base64Data;
+
+        return {
+            canvasLayers: {
+                ...state.canvasLayers,
+                [viewId]: {
+                    ...viewLayers,
+                    [layerKey]: currentFrames
+                }
+            }
+        };
+    }),
+
+    setActiveLayerKey: (layerKey) => set((state) => ({
+        layerPlayback: { ...state.layerPlayback, activeLayerKey: layerKey }
+    })),
+
+    setGlobalFrameIndex: (index) => set((state) => ({
+        layerPlayback: { ...state.layerPlayback, currentFrameIndex: index }
     })),
 
     applyPatch: (patch) => set((state) => ({
@@ -133,10 +168,27 @@ export const useSystemicStore = create((set) => ({
         };
     }),
 
+    updateCustomCameraTransform: (viewId, position, target) => set((state) => {
+        if (!state.workspace.cameraViews[viewId]) return state;
+        return {
+            workspace: {
+                ...state.workspace,
+                cameraViews: {
+                    ...state.workspace.cameraViews,
+                    [viewId]: {
+                        ...state.workspace.cameraViews[viewId],
+                        position: [...position],
+                        target: [...target]
+                    }
+                }
+            }
+        };
+    }),
+
     loadSceneState: (sceneData) => set((state) => {
         const entities = sceneData.entities || {};
         const visuals = sceneData.visuals || {};
-        const canvasLayers = sceneData.canvasLayers || {};
+        const canvasLayers = sceneData.canvasLayers || state.canvasLayers;
         const allocatedIndices = Object.values(entities).map(e => e.index);
 
         const freeIndices = Array.from({ length: 2000 }, (_, i) => 1999 - i)

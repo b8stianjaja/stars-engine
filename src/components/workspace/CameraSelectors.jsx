@@ -5,7 +5,7 @@ export function CameraSelectors({ activeViewId, views }) {
 
     return (
         <div style={{ marginBottom: '20px' }}>
-            <h4 style={styles.header}>Viewports de Composición</h4>
+            <h4 style={styles.header}>Viewports de Composición DCC / Diorama</h4>
             {Object.keys(views).map((id) => (
                 <button
                     key={id}
@@ -17,7 +17,7 @@ export function CameraSelectors({ activeViewId, views }) {
                         color: activeViewId === id ? '#c7d2fe' : '#94a3b8',
                     }}
                 >
-                    {views[id].name}
+                    {views[id].name} {views[id].isFixed ? ' (Locked Matrix)' : ' (Free Orbit)'}
                 </button>
             ))}
         </div>

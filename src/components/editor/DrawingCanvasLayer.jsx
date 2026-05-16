@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useSystemicStore } from '../../core/engine.store';
-import { emitSyncEvent } from '../../core/bridge/sync.client';
 
 export function DrawingCanvasLayer({ worker }) {
     const canvasRef = useRef(null);
@@ -10,16 +10,20 @@ export function DrawingCanvasLayer({ worker }) {
     const [isDrawing, setIsDrawing] = useState(false);
     const [brushColor, setBrushColor] = useState('#10b981');
     const [brushSize, setBrushSize] = useState(6);
-    const [activeLayer, setActiveLayer] = useState('foreground');
-    const [currentFrame, setCurrentFrame] = useState(0);
 
     const activeViewId = useSystemicStore((state) => state.workspace.activeViewId);
     const studioMode = useSystemicStore((state) => state.workspace.studioMode);
-    const canvasLayers = useSystemicStore((state) => state.canvasLayers);
-    const updateLayerAsset = useSystemicStore((state) => state.updateLayerAsset);
+    const cameraViews = useSystemicStore((state) => state.workspace.cameraViews);
+    const canvasLayers = useSystemicStore(useShallow((state) => state.canvasLayers));
+    const layerPlayback = useSystemicStore(useShallow((state) => state.layerPlayback));
+    const updateLayerAssetFrame = useSystemicStore((state) => state.updateLayerAssetFrame);
 
-    // AISLAMIENTO RADICAL: El pincel se bloquea por completo a menos que estemos en el plano cenital ortogonal dedicado
-    const isLayerDisabled = activeViewId !== 'paint_canvas' || studioMode !== 'design';
+    const targetView = cameraViews[activeViewId];
+    // El lienzo se activa automáticamente si estamos en Diseño y sobre una cámara fija ortogonal
+    const isLayerDisabled = studioMode !== 'design' || !targetView || !targetView.isFixed;
+
+    const activeLayerKey = layerPlayback.activeLayerKey;
+    const currentFrameIndex = layerPlayback.currentFrameIndex;
 
     useEffect(() => {
         if (isLayerDisabled || !canvasRef.current) return;
@@ -29,17 +33,23 @@ export function DrawingCanvasLayer({ worker }) {
         canvas.height = canvas.parentElement.clientHeight;
 
         const context = canvas.getContext('2d');
-        context.lineCap = 'round'; context.lineJoin = 'round';
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
         contextRef.current = context;
 
-        const layerKey = `${activeLayer}_f${currentFrame}`;
-        const existingData = canvasLayers[layerKey];
-        if (existingData) {
+        // Limpieza atómica antes de restaurar el frame indexado
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        const viewData = canvasLayers[activeViewId] || {};
+        const frames = viewData[activeLayerKey] || [];
+        const existingFrameData = frames[currentFrameIndex];
+
+        if (existingFrameData) {
             const img = new Image();
-            img.src = existingData;
+            img.src = existingFrameData;
             img.onload = () => context.drawImage(img, 0, 0);
         }
-    }, [isLayerDisabled, activeViewId, activeLayer, currentFrame]);
+    }, [isLayerDisabled, activeViewId, activeLayerKey, currentFrameIndex, canvasLayers]);
 
     const startDrawing = ({ nativeEvent }) => {
         if (!contextRef.current) return;
@@ -56,8 +66,12 @@ export function DrawingCanvasLayer({ worker }) {
         const lp = lastPointRef.current;
 
         const mid = { x: lp.x + (offsetX - lp.x) / 2, y: lp.y + (offsetY - lp.y) / 2 };
-        ctx.beginPath(); ctx.moveTo(lp.x, lp.y); ctx.quadraticCurveTo(mid.x, mid.y, offsetX, offsetY);
-        ctx.strokeStyle = brushColor; ctx.lineWidth = brushSize; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(lp.x, lp.y);
+        ctx.quadraticCurveTo(mid.x, mid.y, offsetX, offsetY);
+        ctx.strokeStyle = brushColor;
+        ctx.lineWidth = brushSize;
+        ctx.stroke();
 
         lastPointRef.current = { x: offsetX, y: offsetY };
     };
@@ -68,10 +82,10 @@ export function DrawingCanvasLayer({ worker }) {
         lastPointRef.current = null;
 
         const base64Data = canvasRef.current.toDataURL('image/png');
-        const layerKey = `${activeLayer}_f${currentFrame}`;
-        updateLayerAsset(layerKey, base64Data);
+        // Persistencia síncrona en la matriz bound del Viewport correspondiente
+        updateLayerAssetFrame(activeViewId, activeLayerKey, currentFrameIndex, base64Data);
 
-        // Procesamiento e inyección O(1) de matriz binaria al Worker
+        // Envío O(1) de la matriz de bits de colisión al Kernel Worker para procesamiento de físicas
         const res = 64;
         const offCanvas = document.createElement('canvas');
         offCanvas.width = res; offCanvas.height = res;
@@ -80,10 +94,15 @@ export function DrawingCanvasLayer({ worker }) {
 
         const pixels = offCtx.getImageData(0, 0, res, res).data;
         const bitmask = new Uint8Array(res * res);
-        for (let i = 0; i < res * res; i++) bitmask[i] = pixels[i * 4 + 3] > 20 ? 1 : 0;
+        for (let i = 0; i < res * res; i++) {
+            bitmask[i] = pixels[i * 4 + 3] > 20 ? 1 : 0;
+        }
 
         if (worker) {
-            worker.postMessage({ type: 'UPDATE_CANVAS_GRID', payload: { layer: activeLayer, frameIndex: currentFrame, resolution: res, grid: bitmask } });
+            worker.postMessage({
+                type: 'UPDATE_CANVAS_GRID',
+                payload: { viewId: activeViewId, layer: activeLayerKey, frameIndex: currentFrameIndex, resolution: res, grid: bitmask }
+            });
         }
     };
 
@@ -91,18 +110,19 @@ export function DrawingCanvasLayer({ worker }) {
 
     return (
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 50 }}>
-            <canvas ref={canvasRef} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} style={{ width: '100%', height: '100%', pointerEvents: 'auto', cursor: 'crosshair' }} />
-            <div style={{ position: 'absolute', bottom: 20, right: 20, background: '#09090c', padding: '10px', borderRadius: '4px', border: '1px solid #161622', display: 'flex', gap: '12px', alignItems: 'center', pointerEvents: 'auto' }}>
-                <select value={activeLayer} onChange={(e) => setActiveLayer(e.target.value)} style={{ background: '#050508', color: '#fff', border: '1px solid #1c1c24', padding: '4px', fontSize: '10px', fontFamily: 'monospace' }}>
-                    <option value="foreground">FOREGROUND_WALLS</option>
-                    <option value="background">BACKGROUND_TRIGGERS</option>
-                </select>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#050508', border: '1px solid #1c1c24', padding: '2px', borderRadius: '3px' }}>
-                    <button onClick={() => setCurrentFrame(p => Math.max(0, p - 1))} style={{ background: 'transparent', border: 'none', color: '#ff00aa', cursor: 'pointer', fontSize: '10px' }}>&lt;</button>
-                    <span style={{ fontSize: '10px', color: '#fff', fontFamily: 'monospace' }}>FRAME_{currentFrame}</span>
-                    <button onClick={() => setCurrentFrame(p => Math.min(15, p + 1))} style={{ background: 'transparent', border: 'none', color: '#ff00aa', cursor: 'pointer', fontSize: '10px' }}>&gt;</button>
-                </div>
-                <input type="color" value={brushColor} onChange={(e) => setBrushColor(e.target.value)} style={{ background: 'transparent', border: 'none', width: '22px', height: '20px', cursor: 'pointer' }} />
+            <canvas
+                ref={canvasRef}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                style={{ width: '100%', height: '100%', pointerEvents: 'auto', cursor: 'crosshair' }}
+            />
+            {/* Flotador compacto de configuración de trazo in-viewport */}
+            <div style={{ position: 'absolute', top: 12, right: 12, background: '#050508f0', padding: '6px', borderRadius: '4px', border: '1px solid #ff00aa33', display: 'flex', gap: '8px', alignItems: 'center', pointerEvents: 'auto', backdropFilter: 'blur(8px)' }}>
+                <span style={{ fontSize: '8px', color: '#ff00aa', fontFamily: 'monospace', fontWeight: 'bold' }}>BRUSH_CTRL:</span>
+                <input type="color" value={brushColor} onChange={(e) => setBrushColor(e.target.value)} style={{ background: 'transparent', border: 'none', width: '20px', height: '16px', cursor: 'pointer', padding: 0 }} />
+                <input type="range" min="2" max="24" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} style={{ width: '60px', accentColor: '#ff00aa', height: '3px' }} />
             </div>
         </div>
     );
