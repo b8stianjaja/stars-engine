@@ -21,7 +21,7 @@ export function TelemetryHUD({ worker }) {
             fontFamily: '"Fira Code", monospace', fontSize: '11px', pointerEvents: 'none',
             background: 'rgba(5,5,8,0.75)', padding: '12px', borderLeft: '3px solid #00ff66', zIndex: 100
         }}>
-            <div style={{ fontWeight: 'bold' }}>STARS_ENGINE_V1.0-CORE</div>
+            <div style={{ fontWeight: 'bold' }}>stars engine  V1.0-CORE</div>
             <div style={{ opacity: 0.5, margin: '4px 0' }}>-------------------</div>
             <div>TICK: 60Hz (HARDWARE)</div>
             <div>SCENE_NODES: {entityCount}</div>

@@ -1,6 +1,6 @@
 /**
  * STARS ENGINE V1.0 - Logic Kernel (Web Worker)
- * Ejecución aislada a 60Hz con despacho de comandos atómicos.
+ * Ejecución aislada a 60Hz con despacho de comandos atómicos y corrección de deriva.
  */
 
 let sharedBuffer = null;
@@ -16,6 +16,9 @@ const DISPATCHER = {
     },
 
     ADD_ENTITY_LOGIC: (payload) => {
+        // Evitar duplicaciones redundantes de ID lógico
+        if (entities.some(e => e.id === payload.id)) return;
+
         entities.push({
             id: payload.id,
             index: payload.index,
@@ -24,6 +27,23 @@ const DISPATCHER = {
             z: payload.z ?? 0,
             behavior: null
         });
+    },
+
+    REMOVE_ENTITY_LOGIC: (payload) => {
+        const targetIndex = entities.findIndex(e => e.id === payload.id);
+        if (targetIndex !== -1) {
+            const ent = entities[targetIndex];
+
+            // Mitigación total de Ghosting: colapsar la región de memoria de la entidad al abismo espacial
+            if (floatView) {
+                const offset = ent.index * 3;
+                floatView[offset] = 0;
+                floatView[offset + 1] = -9999.0; // Desplazamiento fuera de la frustum de renderizado
+                floatView[offset + 2] = 0;
+            }
+
+            entities.splice(targetIndex, 1);
+        }
     },
 
     UPDATE_PHYSICAL_POS: (payload) => {
@@ -52,12 +72,16 @@ self.onmessage = (e) => {
 };
 
 function runSimulation() {
-    let lastTime = performance.now();
+    const TARGET_FPS = 60;
+    const TICK_INTERVAL = 1000 / TARGET_FPS; // ~16.666ms
 
-    setInterval(() => {
+    let expectedTickTime = performance.now();
+    let lastTelemetryTime = performance.now();
+
+    function executionStep() {
         const startTick = performance.now();
 
-        // 1. Ejecutar comportamientos de las entidades dinámicas
+        // 1. Ejecutar comportamientos dinámicos inyectados
         for (let i = 0; i < entities.length; i++) {
             const ent = entities[i];
             if (ent.behavior) {
@@ -65,7 +89,7 @@ function runSimulation() {
             }
         }
 
-        // 2. Volcado directo a memoria compartida sin postMessage overhead
+        // 2. Volcado directo O(1) a la vista binaria compartida
         if (floatView) {
             for (let i = 0; i < entities.length; i++) {
                 const ent = entities[i];
@@ -77,12 +101,28 @@ function runSimulation() {
         }
 
         const endTick = performance.now();
-        const delta = startTick - lastTime;
-        lastTime = startTick;
+
+        // --- CÁLCULO NATIVO DE AJUSTE Y DERIVA (DRIFT CORRECTION) ---
+        expectedTickTime += TICK_INTERVAL;
+        const drift = startTick - (expectedTickTime - TICK_INTERVAL);
+        const nextTimeoutDelay = Math.max(0, TICK_INTERVAL - (endTick - startTick) - drift);
+
+        // Despacho periódico de telemetría sin saturar el canal de comunicación
+        const deltaTelemetry = startTick - lastTelemetryTime;
+        lastTelemetryTime = startTick;
 
         self.postMessage({
             type: 'TELEMETRY_DATA',
-            payload: { fps: 1000 / (delta || 16.6), delta, workerLoad: endTick - startTick }
+            payload: {
+                fps: 1000 / (deltaTelemetry || TICK_INTERVAL),
+                delta: deltaTelemetry,
+                workerLoad: endTick - startTick
+            }
         });
-    }, 1000 / 60);
+
+        // Re-encolar de forma adaptativa el siguiente frame físico
+        setTimeout(executionStep, nextTimeoutDelay);
+    }
+
+    setTimeout(executionStep, TICK_INTERVAL);
 }

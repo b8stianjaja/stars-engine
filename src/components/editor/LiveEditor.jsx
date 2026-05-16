@@ -6,12 +6,13 @@ import { TauriBridge } from '../../core/bridge/bridge.tauri';
 export function LiveEditor({ worker }) {
     const selectedEntityId = useSystemicStore(state => state.workspace.selectedEntityId);
     const entities = useSystemicStore(state => state.entities);
-    const applyPatch = useSystemicStore(state => state.applyPatch);
+
+    // CORRECCIÓN: Extraer la acción específica de mutación de scripts para evitar corrupción
+    const updateEntityScript = useSystemicStore(state => state.updateEntityScript);
 
     const activeEntity = entities[selectedEntityId];
     const [localCode, setLocalCode] = useState('');
 
-    // Cada vez que el usuario cambia de entidad seleccionada en el árbol, cargamos su respectivo script
     useEffect(() => {
         if (activeEntity) {
             setLocalCode(activeEntity.scriptCode);
@@ -23,8 +24,8 @@ export function LiveEditor({ worker }) {
     const handleSave = async (value) => {
         if (!selectedEntityId) return;
 
-        // 1. Persistir el código en el Store del Main Thread
-        applyPatch({ [selectedEntityId]: { scriptCode: value } });
+        // 1. Mutar el Store de forma aislada y segura sin destruir las geometrías ni transformaciones
+        updateEntityScript(selectedEntityId, value);
 
         // 2. Inyectar en caliente al Web Worker apuntando quirúrgicamente a su ID
         if (worker) {
@@ -34,11 +35,11 @@ export function LiveEditor({ worker }) {
             });
         }
 
-        // 3. Resguardar de forma nativa vía Tauri
+        // 3. Guardado nativo asíncrono
         try {
             await TauriBridge.saveScript(`${selectedEntityId}.js`, value);
         } catch (e) {
-            // Aislamiento silencioso de IO nativa
+            // Aislamiento de IO
         }
     };
 

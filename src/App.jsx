@@ -61,7 +61,8 @@ export function App() {
             {/* El Viewport se adapta quirúrgicamente al diseño del Workspace Studio */}
             <div style={{ position: 'absolute', top: 0, left: '280px', width: 'calc(100vw - 280px)', height: 'calc(100vh - 240px)' }}>
                 <Canvas shadows dpr={[1, 2]} gl={{ antialias: true }}>
-                    <Viewport sharedBuffer={sharedBuffer} />
+                    {/* Pasamos el puntero del worker activo para habilitar la sincronización de arrastre de gizmos */}
+                    <Viewport sharedBuffer={sharedBuffer} worker={activeWorker} />
                 </Canvas>
             </div>
 

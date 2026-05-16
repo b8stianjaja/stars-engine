@@ -14,6 +14,8 @@ export const useSystemicStore = create((set) => ({
         activeViewId: 'free',     // Puntero óptico activo ('free' o ID de vista)
         showBlueprints: true,     // Flag de renderizado (true = Sólido, false = Wireframe)
         selectedEntityId: null,   // ID de la entidad enfocada en el inspector
+        transformMode: 'translate', // Herramienta activa de transformación: 'translate' o 'scale'
+        snapValue: 0.5,           // Incremento de rejilla (0 = Libre, >0 = Forzar Snapping)
         cameraViews: {
             free: { name: "Cámara Libre Workspace", position: [8, 8, 8], target: [0, 0, 0] },
             isometric: { name: "Viewport Isométrico", position: [6, 6, 6], target: [0, 0, 0] },
@@ -23,12 +25,10 @@ export const useSystemicStore = create((set) => ({
 
     // --- ACCIONES MUTADORAS (MUTATORS) ---
 
-    // Parches rápidos provenientes del Kernel (Web Worker)
     applyPatch: (patch) => set((state) => ({
         entities: { ...state.entities, ...patch }
     })),
 
-    // Registro inicial compatible con la firma estricta (id, data, visualHash) de App.jsx
     registerEntity: (id, data, visualHash) => set((state) => ({
         entities: {
             ...state.entities,
@@ -46,7 +46,19 @@ export const useSystemicStore = create((set) => ({
         visuals: { ...state.visuals, [id]: visualHash }
     })),
 
-    // Modificador paramétrico O(1) invocado desde la UI del Inspector
+    removeEntity: (id) => set((state) => {
+        const { [id]: _, ...remainingEntities } = state.entities;
+        const { [id]: __, ...remainingVisuals } = state.visuals;
+        return {
+            entities: remainingEntities,
+            visuals: remainingVisuals,
+            workspace: {
+                ...state.workspace,
+                selectedEntityId: state.workspace.selectedEntityId === id ? null : state.workspace.selectedEntityId
+            }
+        };
+    }),
+
     updateEntityTransform: (id, field, value) => set((state) => {
         if (!state.entities[id]) return state;
         return {
@@ -57,7 +69,6 @@ export const useSystemicStore = create((set) => ({
         };
     }),
 
-    // Mutador de persistencia de scripts para el LiveEditor
     updateEntityScript: (id, code) => set((state) => {
         if (!state.entities[id]) return state;
         return {
@@ -79,5 +90,13 @@ export const useSystemicStore = create((set) => ({
 
     selectEntity: (id) => set((state) => ({
         workspace: { ...state.workspace, selectedEntityId: id }
+    })),
+
+    setTransformMode: (mode) => set((state) => ({
+        workspace: { ...state.workspace, transformMode: mode }
+    })),
+
+    setSnapValue: (val) => set((state) => ({
+        workspace: { ...state.workspace, snapValue: val }
     }))
 }));
