@@ -103,4 +103,31 @@ export class SceneSerializer {
 
         console.log("[Serializer] Escena restaurada e inyectada en el Kernel.");
     }
+
+    /**
+     * Empaqueta de forma absoluta la escena actual y abre el diálogo nativo para exportar el juego finalizado
+     */
+    static async exportSceneToFile() {
+        console.log("[Serializer] Generando compilado listo para distribución...");
+        const state = useSystemicStore.getState();
+
+        const bundleData = {
+            version: "1.0-RELEASE",
+            timestamp: Date.now(),
+            camera: state.workspace.directorCameraData ?? null,
+            entities: state.entities ?? {},
+            layers: {
+                background: this.getCanvasBase64('background'),
+                midground: this.getCanvasBase64('midground'),
+                foreground: this.getCanvasBase64('foreground')
+            }
+        };
+
+        const success = await TauriBridge.exportStandaloneScene(bundleData);
+        if (success) {
+            console.log("[Serializer] Exportación standalone completada sin errores.");
+        } else {
+            console.warn("[Serializer] El proceso de exportación fue interrumpido o falló.");
+        }
+    }
 }
