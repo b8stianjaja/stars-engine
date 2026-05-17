@@ -1,7 +1,7 @@
-import { readFile, writeTextFile, readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { readFile, writeTextFile, readTextFile, mkdir, BaseDirectory } from '@tauri-apps/plugin-fs';
 
 /**
- * TauriBridge: Interfaz nativa para Tauri 2.
+ * TauriBridge: Interfaz nativa optimizada para STARS ENGINE V1.0.
  */
 export const TauriBridge = {
     // Carga de activos binarios pesados saltando restricciones del navegador
@@ -14,21 +14,27 @@ export const TauriBridge = {
         }
     },
 
-    // Persistencia local de comportamientos inyectados
+    // Persistencia local de comportamientos inyectados en caliente
     async saveScript(fileName, content) {
         try {
+            // CORRECCIÓN PREDICTIVA: Garantizar la existencia de la subcarpeta antes de la escritura
+            await mkdir('scripts', { baseDir: BaseDirectory.AppData, recursive: true });
+
             await writeTextFile(`scripts/${fileName}`, content, {
                 baseDir: BaseDirectory.AppData
             });
             console.log(`[Stars Bridge]: Script ${fileName} guardado exitosamente.`);
         } catch (err) {
-            console.error("[Stars Bridge Error]: Error de escritura en disco:", err);
+            console.error("[Stars Bridge Error]: Error de escritura en disco al salvar script:", err);
         }
     },
 
     // --- PIPELINE DEL SERIALIZADOR DE ESCENAS NATIVO ---
     async saveScene(sceneData) {
         try {
+            // CORRECCIÓN PREDICTIVA: Garantizar la existencia de la subcarpeta antes de la serialización
+            await mkdir('scenes', { baseDir: BaseDirectory.AppData, recursive: true });
+
             await writeTextFile('scenes/main_scene.json', JSON.stringify(sceneData, null, 4), {
                 baseDir: BaseDirectory.AppData
             });

@@ -28,8 +28,10 @@ export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTrans
     const cameraLocked = useSystemicStore(state => state.workspace.cameraLocked);
 
     useEffect(() => {
-        if (isSelected && setTransformTarget) setTransformTarget(localRef.current);
-    }, [isSelected, setTransformTarget]);
+        if (isSelected && setTransformTarget && localRef.current) {
+            setTransformTarget(localRef.current);
+        }
+    }, [isSelected, setTransformTarget, id]);
 
     useFrame(() => {
         if (!globalFloatView || !localRef.current || !entity) return;
@@ -56,18 +58,18 @@ export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTrans
         }
 
         localRef.current.scale.set(
-            globalFloatView[offset + 7] !== 0 ? globalFloatView[offset + 7] : entity.scale[0],
-            globalFloatView[offset + 8] !== 0 ? globalFloatView[offset + 8] : entity.scale[1],
-            globalFloatView[offset + 9] !== 0 ? globalFloatView[offset + 9] : entity.scale[2]
+            globalFloatView[offset + 7] !== 0 ? globalFloatView[offset + 7] : (entity.scale?.[0] ?? 1),
+            globalFloatView[offset + 8] !== 0 ? globalFloatView[offset + 8] : (entity.scale?.[1] ?? 1),
+            globalFloatView[offset + 9] !== 0 ? globalFloatView[offset + 9] : (entity.scale?.[2] ?? 1)
         );
     });
 
     if (!entity) return null;
 
-    const isDesignMode = studioMode === 'design';
+    const isEditorMode = studioMode === 'design' || studioMode === 'logic';
 
     const getMaterial = () => {
-        if (entity.isGhostMask && (!isDesignMode || cameraLocked)) {
+        if (entity.isGhostMask && (!isEditorMode || cameraLocked)) {
             return <meshBasicMaterial colorWrite={false} depthWrite={true} />;
         }
         return (
@@ -102,10 +104,12 @@ export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTrans
     const handleClick = (e) => {
         e.stopPropagation();
 
-        if (isDesignMode && !cameraLocked) {
-            if (!isDraggingRef.current) selectEntity(id);
+        // AHORA PERMITE SELECCIÓN EN AMBOS ENTORNOS DE EDICIÓN
+        if (isEditorMode && !cameraLocked) {
+            if (!isDraggingRef.current) {
+                selectEntity(id);
+            }
         } else {
-            // Despacho limpio y encapsulado del Point & Click hacia el Kernel
             if (worker) {
                 worker.postMessage({
                     type: 'SPATIAL_CLICK',
@@ -120,9 +124,9 @@ export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTrans
 
     return (
         <group ref={localRef} onClick={handleClick} position={pos} scale={sca}>
-            {isSelected && isDesignMode && !cameraLocked && (
+            {isSelected && isEditorMode && !cameraLocked && (
                 <Box args={[1.04, 1.04, 1.04]}>
-                    <meshBasicMaterial color="#0071e3" wireframe opacity={0.6} transparent />
+                    <meshBasicMaterial color="#0071e3" wireframe opacity={0.4} transparent />
                 </Box>
             )}
             {renderGeometry()}

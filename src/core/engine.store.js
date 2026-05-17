@@ -49,9 +49,20 @@ export const useSystemicStore = create((set, get) => ({
     // --- MUTADORES ATÓMICOS DE ENTIDADES ---
     registerEntity: (id, payload) => set((state) => {
         const newFreeIndices = [...state.freeIndices];
-        if (newFreeIndices.length > 0) newFreeIndices.pop();
+        let assignedIndex = 0;
+        if (newFreeIndices.length > 0) {
+            assignedIndex = newFreeIndices.pop();
+        }
         return {
-            entities: { ...state.entities, [id]: { isGhostMask: false, ...payload } },
+            entities: {
+                ...state.entities,
+                [id]: {
+                    isGhostMask: false,
+                    properties: { speed: 5, acceleration: 12 }, // Propiedades dinámicas base
+                    index: assignedIndex,
+                    ...payload
+                }
+            },
             freeIndices: newFreeIndices
         };
     }),
@@ -81,6 +92,21 @@ export const useSystemicStore = create((set, get) => ({
         return { entities: { ...state.entities, [id]: { ...state.entities[id], scriptCode: code } } };
     }),
 
+    // NUEVO: Modificación atómica y reactiva para variables del Inspector de Datos
+    updateEntityProperty: (id, key, value) => set((state) => {
+        if (!state.entities[id]) return state;
+        const currentProperties = state.entities[id].properties ?? {};
+        return {
+            entities: {
+                ...state.entities,
+                [id]: {
+                    ...state.entities[id],
+                    properties: { ...currentProperties, [key]: value }
+                }
+            }
+        };
+    }),
+
     setEntityAsMask: (id, isMask) => set((state) => {
         if (!state.entities[id]) return state;
         return { entities: { ...state.entities, [id]: { ...state.entities[id], isGhostMask: isMask } } };
@@ -88,7 +114,6 @@ export const useSystemicStore = create((set, get) => ({
 
     // --- CARGA DE ESTADO NATIVO (Deserialización) ---
     loadSceneState: (sceneData) => set((state) => {
-        // Restauramos los índices libres basados en las entidades cargadas
         const usedIndices = Object.values(sceneData.entities).map(e => e.index);
         const newFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => i)
             .filter(i => !usedIndices.includes(i))

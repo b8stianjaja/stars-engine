@@ -2,6 +2,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSystemicStore } from '../../core/engine.store';
 import { ArtistStudioPanel } from './ArtistStudioPanel';
 import { DeveloperStudioPanel } from './DeveloperStudioPanel';
+import { ProjectSystemControls } from './ProjectSystemControls';
 
 export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
     const studioMode = useSystemicStore(useShallow(state => state.workspace.studioMode));
@@ -26,7 +27,7 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
             boxShadow: 'var(--shadow-md)',
             transition: 'background 0.3s, border-color 0.3s'
         }}>
-            {/* ENCABEZADO MINIMALISTA */}
+            {/* ENCABEZADO Y CONTROLES DE SISTEMA */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -41,29 +42,36 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
                         letterSpacing: '-0.3px',
                         color: 'var(--text-main)'
                     }}>
-                        Estudio de Arte
+                        STARS ENGINE
                     </span>
                 </div>
 
-                <button
-                    onClick={toggleTheme}
-                    style={{
-                        background: 'var(--bg-input)',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '28px',
-                        height: '28px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        color: 'var(--text-main)',
-                        fontSize: '13px',
-                        transition: 'background 0.2s'
-                    }}
-                >
-                    {isDark ? '☀️' : '🌙'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Pipeline Serializador */}
+                    <ProjectSystemControls worker={worker} />
+
+                    {/* Toggle de Tema Nativo */}
+                    <button
+                        onClick={toggleTheme}
+                        style={{
+                            background: 'transparent',
+                            border: '1px solid var(--border)',
+                            borderRadius: '6px',
+                            width: '24px',
+                            height: '24px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: 'var(--text-main)',
+                            fontSize: '12px',
+                            transition: 'all 0.2s',
+                            outline: 'none'
+                        }}
+                    >
+                        {isDark ? '☀️' : '🌙'}
+                    </button>
+                </div>
             </div>
 
             {/* CONTROL SEGMENTADO TIPO APPLE */}
@@ -71,7 +79,7 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
                 display: 'flex',
                 background: 'var(--bg-input)',
                 padding: '2px',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-md, 8px)',
                 border: '1px solid var(--border)'
             }}>
                 <button
@@ -80,14 +88,14 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
                         flex: 1,
                         padding: '7px 0',
                         fontSize: '12px',
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 'var(--radius-sm, 6px)',
                         cursor: 'pointer',
                         border: 'none',
                         background: studioMode === 'design' ? 'var(--bg-panel)' : 'transparent',
                         color: studioMode === 'design' ? 'var(--text-main)' : 'var(--text-secondary)',
                         fontWeight: studioMode === 'design' ? '600' : '500',
                         transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
-                        boxShadow: studioMode === 'design' ? 'var(--shadow-sm)' : 'none'
+                        boxShadow: studioMode === 'design' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
                     }}
                 >
                     Diseño Visual
@@ -98,14 +106,14 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
                         flex: 1,
                         padding: '7px 0',
                         fontSize: '12px',
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 'var(--radius-sm, 6px)',
                         cursor: 'pointer',
                         border: 'none',
                         background: studioMode === 'logic' ? 'var(--bg-panel)' : 'transparent',
                         color: studioMode === 'logic' ? 'var(--text-main)' : 'var(--text-secondary)',
                         fontWeight: studioMode === 'logic' ? '600' : '500',
                         transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
-                        boxShadow: studioMode === 'logic' ? 'var(--shadow-sm)' : 'none'
+                        boxShadow: studioMode === 'logic' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
                     }}
                 >
                     Lógica

@@ -1,19 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capacidades de lectura y escritura para STARS ENGINE",
+  "description": "Capacidades completas de I/O para STARS ENGINE V1.0",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
-    "fs:allow-read",
-    "fs:allow-write",
-    "fs:allow-exists",
     "dialog:allow-open",
     "dialog:allow-save",
+    "fs:default",
     {
-      "identifier": "fs:scope-appdata",
+      "identifier": "fs:default",
       "allow": [
         {
           "path": "$APPDATA/**"

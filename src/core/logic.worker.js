@@ -2,12 +2,61 @@ let physicsArray = null;
 let inputArray = null;
 const entities = new Map();
 
-// Cola de eventos asíncronos (Para Point & Click)
 const eventQueue = {
     clicks: []
 };
 
-// API PÚBLICA DEL MOTOR (Expuesta al Desarrollador en LiveEditor)
+const PhysicsCore = {
+    getAABB: (ent) => {
+        const halfX = (ent.scaleX ?? 1) / 2;
+        const halfY = (ent.scaleY ?? 1) / 2;
+        const halfZ = (ent.scaleZ ?? 1) / 2;
+        return {
+            minX: ent.x - halfX, maxX: ent.x + halfX,
+            minY: ent.y - halfY, maxY: ent.y + halfY,
+            minZ: ent.z - halfZ, maxZ: ent.z + halfZ
+        };
+    },
+
+    testOverlap: (a, b) => {
+        return (a.minX <= b.maxX && a.maxX >= b.minX) &&
+            (a.minY <= b.maxY && a.maxY >= b.minY) &&
+            (a.minZ <= b.maxZ && a.maxZ >= b.minZ);
+    },
+
+    moveAndSlide: (entity, dx, dy, dz) => {
+        entity.x += dx;
+        let box = PhysicsCore.getAABB(entity);
+        for (const [id, obstacle] of entities) {
+            if (id === entity.id || obstacle.isGhostMask) continue;
+            if (PhysicsCore.testOverlap(box, PhysicsCore.getAABB(obstacle))) {
+                entity.x -= dx;
+                break;
+            }
+        }
+
+        entity.y += dy;
+        box = PhysicsCore.getAABB(entity);
+        for (const [id, obstacle] of entities) {
+            if (id === entity.id || obstacle.isGhostMask) continue;
+            if (PhysicsCore.testOverlap(box, PhysicsCore.getAABB(obstacle))) {
+                entity.y -= dy;
+                break;
+            }
+        }
+
+        entity.z += dz;
+        box = PhysicsCore.getAABB(entity);
+        for (const [id, obstacle] of entities) {
+            if (id === entity.id || obstacle.isGhostMask) continue;
+            if (PhysicsCore.testOverlap(box, PhysicsCore.getAABB(obstacle))) {
+                entity.z -= dz;
+                break;
+            }
+        }
+    }
+};
+
 const Engine = {
     Input: {
         getKey: (keyCode) => {
@@ -16,12 +65,25 @@ const Engine = {
             const index = map[keyCode];
             return index !== undefined ? inputArray[index] === 1 : false;
         },
-        // Consume el último clic espacial realizado en el entorno 3D
         consumeClick: () => eventQueue.clicks.pop() || null
     },
     Math: {
         lerp: (start, end, amt) => (1 - amt) * start + amt * end,
         distance: (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+    },
+    Physics: {
+        moveAndSlide: (entityInstance, moveX, moveY, moveZ) => {
+            PhysicsCore.moveAndSlide(entityInstance, moveX, moveY, moveZ);
+        },
+        getEntitiesNearby: (entityInstance, radius) => {
+            const list = [];
+            for (const [id, target] of entities) {
+                if (id === entityInstance.id) continue;
+                const dist = Math.sqrt((entityInstance.x - target.x) ** 2 + (entityInstance.y - target.y) ** 2 + (entityInstance.z - target.z) ** 2);
+                if (dist <= radius) list.push({ id, name: target.name, type: target.type, x: target.x, y: target.y, z: target.z });
+            }
+            return list;
+        }
     }
 };
 
@@ -40,7 +102,6 @@ function physicsLoop() {
             for (const [id, data] of entities) {
                 if (data.updateLogic) {
                     try {
-                        // Inyección de la API 'Engine' al script del usuario
                         data.updateLogic(data, FIXED_DT, Engine);
 
                         const offset = data.index * 16;
@@ -53,9 +114,9 @@ function physicsLoop() {
                         physicsArray[offset + 5] = data.rotZ ?? 0;
                         physicsArray[offset + 6] = data.rotW ?? 1;
 
-                        physicsArray[offset + 7] = data.scaleX;
-                        physicsArray[offset + 8] = data.scaleY;
-                        physicsArray[offset + 9] = data.scaleZ;
+                        physicsArray[offset + 7] = data.scaleX ?? 1;
+                        physicsArray[offset + 8] = data.scaleY ?? 1;
+                        physicsArray[offset + 9] = data.scaleZ ?? 1;
                     } catch (e) {
                         self.postMessage({ type: 'SCRIPT_STATUS', payload: { id, status: 'RUNTIME_ERROR', error: e.message } });
                         data.updateLogic = null;
@@ -64,7 +125,7 @@ function physicsLoop() {
             }
         }
         accumulator -= TICK_RATE;
-        eventQueue.clicks = []; // Limpieza determinista al final del frame
+        eventQueue.clicks = [];
     }
 
     setTimeout(physicsLoop, Math.max(0, TICK_RATE - accumulator));
@@ -88,18 +149,34 @@ self.onmessage = (e) => {
         case 'ADD_ENTITY_LOGIC':
             if (physicsArray) {
                 const offset = payload.index * 16;
-                physicsArray[offset + 0] = payload.x;
-                physicsArray[offset + 1] = payload.y;
-                physicsArray[offset + 2] = payload.z;
+                physicsArray[offset + 0] = payload.x ?? 0;
+                physicsArray[offset + 1] = payload.y ?? 0;
+                physicsArray[offset + 2] = payload.z ?? 0;
                 physicsArray[offset + 3] = payload.rotX ?? 0;
                 physicsArray[offset + 4] = payload.rotY ?? 0;
                 physicsArray[offset + 5] = payload.rotZ ?? 0;
                 physicsArray[offset + 6] = payload.rotW ?? 1;
-                physicsArray[offset + 7] = payload.scaleX || 1;
-                physicsArray[offset + 8] = payload.scaleY || 1;
-                physicsArray[offset + 9] = payload.scaleZ || 1;
+                physicsArray[offset + 7] = payload.scaleX || (payload.scale?.[0]) || 1;
+                physicsArray[offset + 8] = payload.scaleY || (payload.scale?.[1]) || 1;
+                physicsArray[offset + 9] = payload.scaleZ || (payload.scale?.[2]) || 1;
             }
-            entities.set(payload.id, { ...payload, updateLogic: null, rotX: 0, rotY: 0, rotZ: 0, rotW: 1 });
+
+            entities.set(payload.id, {
+                id: payload.id,
+                ...payload,
+                updateLogic: null,
+                properties: payload.properties ?? {},
+                x: payload.x ?? payload.position?.[0] ?? 0,
+                y: payload.y ?? payload.position?.[1] ?? 0,
+                z: payload.z ?? payload.position?.[2] ?? 0,
+                rotX: payload.rotX ?? 0,
+                rotY: payload.rotY ?? 0,
+                rotZ: payload.rotZ ?? 0,
+                rotW: payload.rotW ?? 1,
+                scaleX: payload.scaleX || (payload.scale?.[0]) || 1,
+                scaleY: payload.scaleY || (payload.scale?.[1]) || 1,
+                scaleZ: payload.scaleZ || (payload.scale?.[2]) || 1
+            });
             break;
 
         case 'UPDATE_PHYSICAL_POS':
@@ -132,11 +209,18 @@ self.onmessage = (e) => {
             }
             break;
 
+        // NUEVO: Sincronización inmediata de datos dinámicos en caliente hacia el Kernel
+        case 'UPDATE_ENTITY_PROPERTIES':
+            if (entities.has(payload.id)) {
+                const ent = entities.get(payload.id);
+                ent.properties = { ...ent.properties, ...payload.properties };
+            }
+            break;
+
         case 'INJECT_SCRIPT':
             if (entities.has(payload.id)) {
                 const ent = entities.get(payload.id);
                 try {
-                    // Sandbox blindado con 'Engine'
                     const logicFn = new Function('entity', 'deltaTime', 'Engine', payload.code);
                     ent.updateLogic = logicFn;
                     self.postMessage({ type: 'SCRIPT_STATUS', payload: { id: payload.id, status: 'RUNNING', error: null } });
