@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useEffect, useState, memo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useSystemicStore } from './core/engine.store';
@@ -5,6 +6,7 @@ import { Viewport } from './view/Viewport';
 import { LiveEditor } from './components/editor/LiveEditor';
 import { WorkspaceSidebar } from './components/editor/WorkspaceSidebar';
 import { DrawingCanvasLayer } from './components/editor/DrawingCanvasLayer';
+import { ProjectSystemControls } from './components/editor/ProjectSystemControls';
 import { InputBridge } from './core/bridge/input.bridge.js';
 import { TelemetryHUD } from './components/debug/TelemetryHUD';
 
@@ -44,10 +46,10 @@ export function App() {
         const view = new Float32Array(sharedBuffer);
         for (let i = 0; i < MAX_ENTITIES; i++) {
             const offset = i * 16;
-            view[offset + 6] = 1;
-            view[offset + 7] = 1;
-            view[offset + 8] = 1;
-            view[offset + 9] = 1;
+            view[offset + 6] = 1; // rotW
+            view[offset + 7] = 1; // scaleX
+            view[offset + 8] = 1; // scaleY
+            view[offset + 9] = 1; // scaleZ
         }
 
         const worker = new Worker(new URL('./core/logic.worker.js', import.meta.url), { type: 'module' });
@@ -97,7 +99,16 @@ export function App() {
     };
 
     return (
-        <div style={{ width: '100vw', height: '100vh', background: 'var(--bg-app)', overflow: 'hidden', display: 'flex', fontFamily: 'var(--font-sans)', transition: 'background 0.3s ease' }}>
+        <div style={{
+            width: '100vw',
+            height: '100vh',
+            background: 'var(--bg-app)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column', // Layout vertical para dar soporte a la barra de herramientas superior
+            fontFamily: 'var(--font-sans)',
+            transition: 'background 0.3s ease'
+        }}>
             <style>{`
                 :root {
                     --bg-app: #09090b; --bg-sidebar: rgba(15, 15, 17, 0.85); --bg-panel: #141416;
@@ -113,23 +124,36 @@ export function App() {
                 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
             `}</style>
 
-            {/* Panel de Control Lateral */}
-            <div style={{ position: 'relative', width: '340px', height: '100%', background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)', borderRight: '1px solid var(--border)', zIndex: 100, flexShrink: 0 }}>
-                <WorkspaceSidebar worker={kernelWorker} toggleTheme={toggleTheme} isDark={true} />
-            </div>
+            {/* PIPELINE DE CONTROL DE PERSISTENCIA (Grado Apple / Cero Fricción Cognitiva) */}
+            <ProjectSystemControls worker={kernelWorker} />
 
-            {/* Entorno de Escenario */}
-            <div style={{ position: 'relative', flex: 1, height: '100%', overflow: 'hidden', display: 'flex' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.background }}><DrawingCanvasLayer targetLayer="background" /></div>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.canvas3D }}><EngineCanvas worker={kernelWorker} /></div>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.midground }}><DrawingCanvasLayer targetLayer="midground" /></div>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.foreground }}><DrawingCanvasLayer targetLayer="foreground" /></div>
+            {/* Espacio de Trabajo Principal (Cuerpo Inferior) */}
+            <div style={{
+                display: 'flex',
+                flex: 1,
+                width: '100%',
+                height: 'calc(100% - 31px)', // Descuenta de forma exacta la altura de los controles de proyecto
+                overflow: 'hidden'
+            }}>
+                {/* Panel de Control Lateral */}
+                <div style={{ position: 'relative', width: '340px', height: '100%', background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)', borderRight: '1px solid var(--border)', zIndex: 100, flexShrink: 0 }}>
+                    <WorkspaceSidebar worker={kernelWorker} toggleTheme={toggleTheme} isDark={true} />
+                </div>
 
-                {/* Monitor de Diagnóstico de Rendimiento (Grado Apple) */}
-                <TelemetryHUD sharedBuffer={sharedBuffer} />
+                {/* Entorno de Escenario e Ilustración Híbrida */}
+                <div style={{ position: 'relative', flex: 1, height: '100%', overflow: 'hidden', display: 'flex' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.background }}><DrawingCanvasLayer targetLayer="background" /></div>
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.canvas3D }}><EngineCanvas worker={kernelWorker} /></div>
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.midground }}><DrawingCanvasLayer targetLayer="midground" /></div>
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.foreground }}><DrawingCanvasLayer targetLayer="foreground" /></div>
 
-                <div style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)', borderLeft: '1px solid var(--border)', zIndex: 100, transform: isDesignMode ? 'translateX(100%)' : 'translateX(0)', opacity: isDesignMode ? 0 : 1, pointerEvents: isDesignMode ? 'none' : 'auto', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease' }}>
-                    <LiveEditor worker={kernelWorker} />
+                    {/* Monitor de Diagnóstico de Rendimiento (Hardware Abstract Layer Telemetry) */}
+                    <TelemetryHUD sharedBuffer={sharedBuffer} />
+
+                    {/* Entorno de Edición Lógica y Scripts en Caliente */}
+                    <div style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)', borderLeft: '1px solid var(--border)', zIndex: 100, transform: isDesignMode ? 'translateX(100%)' : 'translateX(0)', opacity: isDesignMode ? 0 : 1, pointerEvents: isDesignMode ? 'none' : 'auto', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease' }}>
+                        <LiveEditor worker={kernelWorker} />
+                    </div>
                 </div>
             </div>
         </div>
