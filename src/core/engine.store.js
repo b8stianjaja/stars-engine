@@ -11,8 +11,6 @@ export const useSystemicStore = create((set, get) => ({
         showBlueprints: true,
         transformMode: 'translate',
         snapValue: 0.5,
-
-        // --- CÁMARA DE DIRECTOR ---
         cameraLocked: false,
         directorCameraData: null // { position: [x,y,z], quaternion: [x,y,z,w] }
     },
@@ -26,6 +24,33 @@ export const useSystemicStore = create((set, get) => ({
         brushSize: 4,
         opacityGuide: 0.5
     },
+
+    // --- ESTADO COLABORATIVO (HOST LOCAL) ---
+    collaboration: {
+        isConnected: false,
+        localRole: 'artist', // 'artist' | 'developer'
+        serverUrl: 'http://localhost:3001',
+        latency: 0,
+        roomCode: 'LAN-SESSION'
+    },
+
+    // --- MUTADORES DE COLABORACIÓN ---
+    setConnectionStatus: (connected) => set((state) => ({
+        collaboration: { ...state.collaboration, isConnected: connected }
+    })),
+    setLatency: (ms) => set((state) => ({
+        collaboration: { ...state.collaboration, latency: ms }
+    })),
+    setLocalRole: (role) => set((state) => {
+        const modeMapping = role === 'artist' ? 'design' : 'logic';
+        return {
+            collaboration: { ...state.collaboration, localRole: role },
+            workspace: { ...state.workspace, studioMode: modeMapping }
+        };
+    }),
+    setServerUrl: (url) => set((state) => ({
+        collaboration: { ...state.collaboration, serverUrl: url }
+    })),
 
     // --- MUTADORES DE WORKSPACE ---
     setStudioMode: (mode) => set((state) => ({ workspace: { ...state.workspace, studioMode: mode } })),
@@ -46,32 +71,46 @@ export const useSystemicStore = create((set, get) => ({
     setBrushSize: (size) => set((state) => ({ layerPlayback: { ...state.layerPlayback, brushSize: size } })),
     setActiveLayerKey: (key) => set((state) => ({ layerPlayback: { ...state.layerPlayback, activeLayerKey: key } })),
 
-    // --- MUTADORES ATÓMICOS DE ENTIDADES ---
-    registerEntity: (id, payload) => set((state) => {
+    // --- MUTADORES ATÓMICOS DE ENTIDADES (CON INTEGRACIÓN DE RED BI-DIRECCIONAL) ---
+    registerEntity: (id, payload, remoteOrigin = false) => set((state) => {
+        if (state.entities[id]) return state;
         const newFreeIndices = [...state.freeIndices];
         let assignedIndex = 0;
         if (newFreeIndices.length > 0) {
             assignedIndex = newFreeIndices.pop();
         }
+
+        const entityData = {
+            isGhostMask: false,
+            properties: { speed: 5, acceleration: 12 },
+            index: assignedIndex,
+            ...payload
+        };
+
+        if (!remoteOrigin) {
+            import('./bridge/sync.client').then(({ emitSyncEvent }) => {
+                emitSyncEvent('NET_ENTITY_CREATE', { id, payload: entityData });
+            });
+        }
+
         return {
-            entities: {
-                ...state.entities,
-                [id]: {
-                    isGhostMask: false,
-                    properties: { speed: 5, acceleration: 12 }, // Propiedades dinámicas base
-                    index: assignedIndex,
-                    ...payload
-                }
-            },
+            entities: { ...state.entities, [id]: entityData },
             freeIndices: newFreeIndices
         };
     }),
 
-    removeEntity: (id) => set((state) => {
+    removeEntity: (id, remoteOrigin = false) => set((state) => {
         const entity = state.entities[id];
         if (!entity) return state;
         const newEntities = { ...state.entities };
         delete newEntities[id];
+
+        if (!remoteOrigin) {
+            import('./bridge/sync.client').then(({ emitSyncEvent }) => {
+                emitSyncEvent('NET_ENTITY_DELETE', { id });
+            });
+        }
+
         return {
             entities: newEntities,
             freeIndices: [...state.freeIndices, entity.index],
@@ -82,20 +121,40 @@ export const useSystemicStore = create((set, get) => ({
         };
     }),
 
-    updateEntityTransform: (id, field, value) => set((state) => {
+    updateEntityTransform: (id, field, value, remoteOrigin = false) => set((state) => {
         if (!state.entities[id]) return state;
+
+        if (!remoteOrigin) {
+            import('./bridge/sync.client').then(({ emitSyncEvent }) => {
+                emitSyncEvent('NET_ENTITY_TRANSFORM', { id, field, value });
+            });
+        }
+
         return { entities: { ...state.entities, [id]: { ...state.entities[id], [field]: value } } };
     }),
 
-    updateEntityScript: (id, code) => set((state) => {
+    updateEntityScript: (id, code, remoteOrigin = false) => set((state) => {
         if (!state.entities[id]) return state;
+
+        if (!remoteOrigin) {
+            import('./bridge/sync.client').then(({ emitSyncEvent }) => {
+                emitSyncEvent('NET_ENTITY_SCRIPT', { id, code });
+            });
+        }
+
         return { entities: { ...state.entities, [id]: { ...state.entities[id], scriptCode: code } } };
     }),
 
-    // NUEVO: Modificación atómica y reactiva para variables del Inspector de Datos
-    updateEntityProperty: (id, key, value) => set((state) => {
+    updateEntityProperty: (id, key, value, remoteOrigin = false) => set((state) => {
         if (!state.entities[id]) return state;
         const currentProperties = state.entities[id].properties ?? {};
+
+        if (!remoteOrigin) {
+            import('./bridge/sync.client').then(({ emitSyncEvent }) => {
+                emitSyncEvent('NET_ENTITY_PROPERTY', { id, key, value });
+            });
+        }
+
         return {
             entities: {
                 ...state.entities,
@@ -112,7 +171,6 @@ export const useSystemicStore = create((set, get) => ({
         return { entities: { ...state.entities, [id]: { ...state.entities[id], isGhostMask: isMask } } };
     }),
 
-    // --- CARGA DE ESTADO NATIVO (Deserialización) ---
     loadSceneState: (sceneData) => set((state) => {
         const usedIndices = Object.values(sceneData.entities).map(e => e.index);
         const newFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => i)

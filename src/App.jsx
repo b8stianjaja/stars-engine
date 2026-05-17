@@ -10,7 +10,11 @@ import { ProjectSystemControls } from './components/editor/ProjectSystemControls
 import { InputBridge } from './core/bridge/input.bridge.js';
 import { TelemetryHUD } from './components/debug/TelemetryHUD';
 
-// Memoria Física y de Hardware
+// NUEVOS MÓDULOS DEL ENTORNO COLABORATIVO GRADO APPLE
+import { CollaborationHeader } from './components/editor/CollaborationHeader';
+import { DataInspectorPanel } from './components/editor/DataInspectorPanel';
+import { initSyncClient } from './core/bridge/sync.client';
+
 const MAX_ENTITIES = 2000;
 const SHARED_MEM_SIZE = MAX_ENTITIES * 16 * 4;
 const sharedBuffer = new SharedArrayBuffer(SHARED_MEM_SIZE);
@@ -77,6 +81,9 @@ export function App() {
 
         setKernelWorker(worker);
 
+        // Inicialización nativa silenciosa del canalizador LAN al arrancar
+        initSyncClient(worker);
+
         return () => {
             worker.terminate();
             bootSequenceRun.current = false;
@@ -105,7 +112,7 @@ export function App() {
             background: 'var(--bg-app)',
             overflow: 'hidden',
             display: 'flex',
-            flexDirection: 'column', // Layout vertical para dar soporte a la barra de herramientas superior
+            flexDirection: 'column',
             fontFamily: 'var(--font-sans)',
             transition: 'background 0.3s ease'
         }}>
@@ -124,36 +131,60 @@ export function App() {
                 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
             `}</style>
 
-            {/* PIPELINE DE CONTROL DE PERSISTENCIA (Grado Apple / Cero Fricción Cognitiva) */}
+            {/* HIPERVISOR DE TELEMETRÍA Y CONTROL DE RED SUPERIOR */}
+            <CollaborationHeader worker={kernelWorker} />
+
+            {/* BARRA INFERIOR SECUNDARIA DE PERSISTENCIA */}
             <ProjectSystemControls worker={kernelWorker} />
 
-            {/* Espacio de Trabajo Principal (Cuerpo Inferior) */}
+            {/* ESPACIO DE TRABAJO PRINCIPAL MULTIPANEL */}
             <div style={{
                 display: 'flex',
                 flex: 1,
                 width: '100%',
-                height: 'calc(100% - 31px)', // Descuenta de forma exacta la altura de los controles de proyecto
-                overflow: 'hidden'
+                height: 'calc(100% - 79px)', // Descuenta con exactitud CollaborationHeader (48px) + ProjectSystemControls (31px)
+                overflow: 'hidden',
+                position: 'relative'
             }}>
-                {/* Panel de Control Lateral */}
+                {/* COLUMNA IZQUIERDA: ESTRUCTURA Y NAVEGACIÓN */}
                 <div style={{ position: 'relative', width: '340px', height: '100%', background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)', borderRight: '1px solid var(--border)', zIndex: 100, flexShrink: 0 }}>
                     <WorkspaceSidebar worker={kernelWorker} toggleTheme={toggleTheme} isDark={true} />
                 </div>
 
-                {/* Entorno de Escenario e Ilustración Híbrida */}
+                {/* AREA CENTRAL DE SIMULACIÓN E ILUSTRACIÓN 2.5D */}
                 <div style={{ position: 'relative', flex: 1, height: '100%', overflow: 'hidden', display: 'flex' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.background }}><DrawingCanvasLayer targetLayer="background" /></div>
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.canvas3D }}><EngineCanvas worker={kernelWorker} /></div>
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.midground }}><DrawingCanvasLayer targetLayer="midground" /></div>
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.foreground }}><DrawingCanvasLayer targetLayer="foreground" /></div>
 
-                    {/* Monitor de Diagnóstico de Rendimiento (Hardware Abstract Layer Telemetry) */}
+                    {/* Telemetría de bajo nivel flotante */}
                     <TelemetryHUD sharedBuffer={sharedBuffer} />
 
-                    {/* Entorno de Edición Lógica y Scripts en Caliente */}
-                    <div style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)', borderLeft: '1px solid var(--border)', zIndex: 100, transform: isDesignMode ? 'translateX(100%)' : 'translateX(0)', opacity: isDesignMode ? 0 : 1, pointerEvents: isDesignMode ? 'none' : 'auto', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease' }}>
+                    {/* ENTORNO DE EDICIÓN LÓGICA (DESPLEGABLE MONACO DESDE LA DERECHA) */}
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        width: '50%',
+                        height: '100%',
+                        background: 'var(--bg-sidebar)',
+                        backdropFilter: 'var(--blur-panel)',
+                        WebkitBackdropFilter: 'var(--blur-panel)',
+                        borderLeft: '1px solid var(--border)',
+                        zIndex: 110,
+                        transform: isDesignMode ? 'translateX(100%)' : 'translateX(0)',
+                        opacity: isDesignMode ? 0 : 1,
+                        pointerEvents: isDesignMode ? 'none' : 'auto',
+                        transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease'
+                    }}>
                         <LiveEditor worker={kernelWorker} />
                     </div>
+                </div>
+
+                {/* COLUMNA DERECHA PERIMETRAL: INSPECTOR DE VARIABLES REFLECTIVO */}
+                <div style={{ zIndex: 120, height: '100%', position: 'relative', flexShrink: 0 }}>
+                    <DataInspectorPanel worker={kernelWorker} />
                 </div>
             </div>
         </div>
