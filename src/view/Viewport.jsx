@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo, Suspense } from 'react';
+import { useRef, useEffect, useState, useMemo, Suspense, memo } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { TransformControls, OrbitControls, Grid, Environment } from '@react-three/drei';
@@ -6,7 +6,7 @@ import { useSystemicStore } from '../core/engine.store';
 import { useShallow } from 'zustand/react/shallow';
 import { Actor } from './Actor';
 
-export function Viewport({ sharedBuffer, worker }) {
+export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
     const { camera, gl } = useThree();
 
     const entityIds = useSystemicStore(useShallow(state => Object.keys(state.entities)));
@@ -151,7 +151,6 @@ export function Viewport({ sharedBuffer, worker }) {
                 <Grid args={[100, 100]} position={[0, -0.01, 0]} cellColor="#0071e3" sectionColor="#444444" sectionSize={1} cellSize={0.5} fadeDistance={40} />
             )}
 
-            {/* TAPETE INVISIBLE DE CONTROL: Captura clics en el vacío para deseleccionar de forma segura sin romper los Gizmos */}
             {isEditorMode && !cameraLocked && (
                 <mesh
                     rotation={[-Math.PI / 2, 0, 0]}
@@ -185,4 +184,4 @@ export function Viewport({ sharedBuffer, worker }) {
             )}
         </group>
     );
-}
+});

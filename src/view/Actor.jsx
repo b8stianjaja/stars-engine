@@ -19,6 +19,16 @@ const SpriteRenderer = ({ color }) => {
     );
 };
 
+// REGISTRO REFLECTIVO DINÁMICO EXTENSIBLE (Anti Switch-Case)
+const GEOMETRY_REGISTRY = {
+    sphere: (material) => <Sphere args={[0.5, 32, 32]} castShadow receiveShadow>{material}</Sphere>,
+    cylinder: (material) => <Cylinder args={[0.5, 0.5, 1, 32]} castShadow receiveShadow>{material}</Cylinder>,
+    pyramid: (material) => <Cone args={[0.5, 1, 4]} castShadow receiveShadow>{material}</Cone>,
+    plane: (material) => <Plane args={[1, 1]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>{material}</Plane>,
+    torus: (material) => <Torus args={[0.5, 0.2, 16, 32]} castShadow receiveShadow>{material}</Torus>,
+    box: (material) => <Box args={[1, 1, 1]} castShadow receiveShadow>{material}</Box>
+};
+
 export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTransformTarget, worker }) => {
     const localRef = useRef(null);
 
@@ -90,21 +100,13 @@ export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTrans
         }
 
         const material = getMaterial();
-        switch (entity.type) {
-            case 'sphere': return <Sphere args={[0.5, 32, 32]} castShadow receiveShadow>{material}</Sphere>;
-            case 'cylinder': return <Cylinder args={[0.5, 0.5, 1, 32]} castShadow receiveShadow>{material}</Cylinder>;
-            case 'pyramid': return <Cone args={[0.5, 1, 4]} castShadow receiveShadow>{material}</Cone>;
-            case 'plane': return <Plane args={[1, 1]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>{material}</Plane>;
-            case 'torus': return <Torus args={[0.5, 0.2, 16, 32]} castShadow receiveShadow>{material}</Torus>;
-            case 'box':
-            default: return <Box args={[1, 1, 1]} castShadow receiveShadow>{material}</Box>;
-        }
+        const RenderComponent = GEOMETRY_REGISTRY[entity.type] || GEOMETRY_REGISTRY.box;
+        return RenderComponent(material);
     };
 
     const handleClick = (e) => {
         e.stopPropagation();
 
-        // AHORA PERMITE SELECCIÓN EN AMBOS ENTORNOS DE EDICIÓN
         if (isEditorMode && !cameraLocked) {
             if (!isDraggingRef.current) {
                 selectEntity(id);
