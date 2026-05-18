@@ -4,121 +4,90 @@ import { TauriBridge } from './bridge.tauri';
 
 export class SceneSerializer {
     /**
-     * Captura la trinidad de datos de memoria y empaqueta el estado actual del motor.
-     * @param {boolean} forceRuntimeLayout - Fuerza al payload a comportarse como juego final ejecutable
-     * @returns {Object} Proyecto unificado listo para distribución o guardado local
+     * Captura las capas de ilustración activas en el DOM de forma aislada.
+     * @returns {Object} Diccionario con las tres capas codificadas en Base64 PNG
      */
-    static serializeWorkspace(forceRuntimeLayout = false) {
-        const store = useSystemicStore.getState();
+    static captureCanvasLayers() {
+        const layers = { background: null, midground: null, foreground: null };
 
-        const projectPackage = {
-            engineVersion: "1.0.0",
-            timestamp: Date.now(),
-            editorVisible: !forceRuntimeLayout, // Apaga la UI si se genera un Runtime compilado
-            workspace: {
-                studioMode: forceRuntimeLayout ? "design" : store.workspace.studioMode,
-                selectedEntityId: null
-            },
-            layerPlayback: {
-                paintMode: store.layerPlayback.paintMode,
-                activeLayer: store.layerPlayback.activeLayer,
-                playbackSpeed: store.layerPlayback.playbackSpeed
-            },
-            entities: store.entities ?? {},
-            canvasLayers: {
-                background: null,
-                midground: null,
-                foreground: null
-            }
-        };
-
-        // Captura y serialización de los lienzos dinámicos de ilustración 2D
         ['background', 'midground', 'foreground'].forEach(layerId => {
             const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
             if (canvasElement) {
                 const context = canvasElement.getContext('2d');
                 if (context) {
                     const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height);
-                    const buffer = new Uint32Array(imageData.data.buffer);
+                    const pixelBuffer = new Uint32Array(imageData.data.buffer);
 
-                    // Optimización de asignación: Evita procesar Base64 de capas vacías sin píxeles pintados
-                    const hasData = buffer.some(pixel => pixel !== 0);
-                    if (hasData) {
-                        projectPackage.canvasLayers[layerId] = canvasElement.toDataURL('image/png');
+                    // Comprobación de canal alfa para no almacenar Base64 de capas vacías
+                    const hasPixels = pixelBuffer.some(pixel => pixel !== 0);
+                    if (hasPixels) {
+                        layers[layerId] = canvasElement.toDataURL('image/png');
                     }
                 }
             }
         });
-
-        return projectPackage;
+        return layers;
     }
 
     /**
-     * Guarda el estado de la sesión actual en el canal de persistencia seguro del puente
+     * Serializa únicamente el estado volátil del Viewport activo.
+     * Utilizado para los guardados en caché intermedios durante los cambios de nivel.
      */
-    static async saveCurrentScene() {
-        const payload = this.serializeWorkspace(false);
-        return await TauriBridge.saveScene(payload);
+    static serializeActiveViewportState() {
+        const store = useSystemicStore.getState();
+        return {
+            entities: store.entities ?? {},
+            canvasLayers: this.captureCanvasLayers()
+        };
     }
 
     /**
-     * Restaura el estado total de la simulación e hidrata el buffer compartido a partir de un archivo
+     * Compila la totalidad del Proyecto de Videojuego (El Storyboard completo).
+     * @param {boolean} forceRuntime - Remueve paneles de edición si se exporta el juego compilado
      */
-    static async loadCurrentScene(worker) {
-        const data = await TauriBridge.loadScene();
-        if (!data) return false;
-
+    static serializeFullProjectBundle(forceRuntime = false) {
         const store = useSystemicStore.getState();
 
-        // 1. Purgar el mapa de entidades activo en el núcleo de Zustand
-        Object.keys(store.entities).forEach(id => store.removeEntity(id));
+        // Sincronizar la escena que se está editando actualmente en el registro antes del volcado a disco
+        store.commitActiveSceneSnapshot();
+        const refreshedStore = useSystemicStore.getState();
 
-        // 2. Re-inyectar las entidades cargadas al buffer a 60Hz e hidratar hilos concurrentes
-        if (data.entities) {
-            Object.keys(data.entities).forEach(id => {
-                const entity = data.entities[id];
-                store.registerEntity(id, entity);
+        return {
+            engineVersion: "1.0.0",
+            timestamp: Date.now(),
+            editorVisible: !forceRuntime,
+            sceneRegistry: refreshedStore.sceneRegistry,
+            globalConfiguration: {
+                studioMode: forceRuntime ? "play" : refreshedStore.workspace.studioMode
+            }
+        };
+    }
 
-                if (worker) {
-                    worker.postMessage({
-                        type: 'ADD_ENTITY_LOGIC',
-                        payload: { id, ...entity }
-                    });
-                }
-            });
-        }
+    /**
+     * Salva el Storyboard completo en la persistencia del puente híbrido.
+     */
+    static async saveCurrentScene() {
+        const fullBundle = this.serializeFullProjectBundle(false);
+        return await TauriBridge.saveScene(fullBundle);
+    }
 
-        // 3. Re-pintar de forma síncrona los assets de ilustración 2D en los elementos del DOM
-        if (data.canvasLayers) {
-            Object.keys(data.canvasLayers).forEach(layerId => {
-                const dataUrl = data.canvasLayers[layerId];
-                const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
-                if (canvasElement && dataUrl) {
-                    const context = canvasElement.getContext('2d');
-                    const img = new Image();
-                    img.onload = () => {
-                        context.clearRect(0, 0, canvasElement.width, canvasElement.height);
-                        context.drawImage(img, 0, 0);
-                    };
-                    img.src = dataUrl;
-                }
-            });
-        }
+    /**
+     * Carga y reconstruye el árbol completo de niveles e hidrata el motor en caliente.
+     */
+    static async loadCurrentScene(worker) {
+        const loadedBundle = await TauriBridge.loadScene();
+        if (!loadedBundle || !loadedBundle.sceneRegistry) return false;
 
-        // 4. Restaurar variables operativas del espacio de trabajo
-        if (data.workspace?.studioMode) {
-            store.setStudioMode(data.workspace.studioMode);
-        }
-
+        const store = useSystemicStore.getState();
+        store.hydrateFullStoryboard(loadedBundle, worker);
         return true;
     }
 
     /**
-     * AUTOMATIZACIÓN DE EXPORTACIÓN NATIVA: Genera el ejecutable (.exe) final y empaqueta la carga
+     * PIPELINE DE EXPORTACIÓN FINAL (.EXE): Duplica el player nativo e inyecta el Storyboard completo.
      */
     static async exportSceneToFile() {
-        // Generar un payload forzando el modo ejecutable final sin UI lateral
-        const runtimePayload = this.serializeWorkspace(true);
-        return await TauriBridge.exportStandaloneScene(runtimePayload);
+        const runtimeBundle = this.serializeFullProjectBundle(true);
+        return await TauriBridge.exportStandaloneScene(runtimeBundle);
     }
 }

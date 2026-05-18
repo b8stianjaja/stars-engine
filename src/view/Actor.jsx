@@ -1,137 +1,102 @@
-import { useRef, useEffect } from 'react';
+// src/view/Actor.jsx
+import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Box, Sphere, Cylinder, Cone, Plane, Torus, useTexture } from '@react-three/drei';
 import { useSystemicStore } from '../core/engine.store';
-import heroAsset from '../assets/hero.png';
+import { useShallow } from 'zustand/react/shallow';
 
-const SpriteRenderer = ({ color }) => {
-    const texture = useTexture(heroAsset);
-    return (
-        <Plane args={[1, 1.5]} castShadow receiveShadow>
-            <meshStandardMaterial
-                map={texture}
-                color={color || '#ffffff'}
-                transparent={true}
-                alphaTest={0.5}
-                side={2}
-            />
-        </Plane>
-    );
-};
-
-// REGISTRO REFLECTIVO DINÁMICO EXTENSIBLE (Anti Switch-Case)
+// REGISTRO DE PRIMITIVAS (MANDATO 5: Cero bloques switch/case en el renderizador)
 const GEOMETRY_REGISTRY = {
-    sphere: (material) => <Sphere args={[0.5, 32, 32]} castShadow receiveShadow>{material}</Sphere>,
-    cylinder: (material) => <Cylinder args={[0.5, 0.5, 1, 32]} castShadow receiveShadow>{material}</Cylinder>,
-    pyramid: (material) => <Cone args={[0.5, 1, 4]} castShadow receiveShadow>{material}</Cone>,
-    plane: (material) => <Plane args={[1, 1]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>{material}</Plane>,
-    torus: (material) => <Torus args={[0.5, 0.2, 16, 32]} castShadow receiveShadow>{material}</Torus>,
-    box: (material) => <Box args={[1, 1, 1]} castShadow receiveShadow>{material}</Box>
+    box: <boxGeometry args={[1, 1, 1]} />,
+    sphere: <sphereGeometry args={[0.5, 32, 32]} />,
+    cylinder: <cylinderGeometry args={[0.5, 0.5, 1, 32]} />,
+    capsule: <capsuleGeometry args={[0.5, 1, 2, 16]} />,
+    plane: <planeGeometry args={[1, 1]} />
 };
 
-export const Actor = ({ id, globalFloatView, isSelected, isDraggingRef, setTransformTarget, worker }) => {
-    const localRef = useRef(null);
+export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTransformTarget }) {
+    const meshRef = useRef(null);
+    const materialRef = useRef(null);
 
-    const entity = useSystemicStore(state => state.entities[id]);
-    const selectEntity = useSystemicStore(state => state.selectEntity);
-    const studioMode = useSystemicStore(state => state.workspace.studioMode);
-    const cameraLocked = useSystemicStore(state => state.workspace.cameraLocked);
+    // Suscripción superficial a los datos inmutables de la entidad
+    const entity = useSystemicStore(useShallow(state => state.entities[id]));
+    const selectEntity = useSystemicStore(state => state.workspace.selectEntity);
 
-    useEffect(() => {
-        if (isSelected && setTransformTarget && localRef.current) {
-            setTransformTarget(localRef.current);
-        }
-    }, [isSelected, setTransformTarget, id]);
+    // Memorización de la geometría base para evitar fugas de memoria en WebGL
+    const GeometryComponent = useMemo(() => {
+        return GEOMETRY_REGISTRY[entity?.type] || GEOMETRY_REGISTRY['box'];
+    }, [entity?.type]);
 
+    // BUCLE DE LECTURA DE HARDWARE (60Hz)
     useFrame(() => {
-        if (!globalFloatView || !localRef.current || !entity) return;
-        if (isSelected && isDraggingRef.current) return;
+        if (!meshRef.current || !entity || !globalFloatView) return;
+
+        // SISTEMA ANTI-JUDDER: Congelar la lectura del buffer si el operador está arrastrando los controles
+        if (isSelected && isDraggingRef?.current) return;
 
         const offset = entity.index * 16;
-        if (isNaN(globalFloatView[offset + 0])) return;
 
-        localRef.current.position.set(
+        // Sincronización Directa de Memoria Compartida -> Matriz WebGL
+        meshRef.current.position.set(
             globalFloatView[offset + 0],
             globalFloatView[offset + 1],
             globalFloatView[offset + 2]
         );
-
-        if (entity.type === 'sprite') {
-            localRef.current.quaternion.set(0, 0, 0, 1);
-        } else {
-            localRef.current.quaternion.set(
-                globalFloatView[offset + 3] ?? 0,
-                globalFloatView[offset + 4] ?? 0,
-                globalFloatView[offset + 5] ?? 0,
-                globalFloatView[offset + 6] ?? 1
-            );
-        }
-
-        localRef.current.scale.set(
-            globalFloatView[offset + 7] !== 0 ? globalFloatView[offset + 7] : (entity.scale?.[0] ?? 1),
-            globalFloatView[offset + 8] !== 0 ? globalFloatView[offset + 8] : (entity.scale?.[1] ?? 1),
-            globalFloatView[offset + 9] !== 0 ? globalFloatView[offset + 9] : (entity.scale?.[2] ?? 1)
+        meshRef.current.quaternion.set(
+            globalFloatView[offset + 3],
+            globalFloatView[offset + 4],
+            globalFloatView[offset + 5],
+            globalFloatView[offset + 6]
+        );
+        meshRef.current.scale.set(
+            globalFloatView[offset + 7],
+            globalFloatView[offset + 8],
+            globalFloatView[offset + 9]
         );
     });
 
     if (!entity) return null;
 
-    const isEditorMode = studioMode === 'design' || studioMode === 'logic';
+    const baseColor = entity.color || entity.properties?.color || '#ffffff';
+    const isMask = entity.isGhostMask || false;
 
-    const getMaterial = () => {
-        if (entity.isGhostMask && (!isEditorMode || cameraLocked)) {
-            return <meshBasicMaterial colorWrite={false} depthWrite={true} />;
-        }
-        return (
-            <meshStandardMaterial
-                color={entity.color || '#8e8e93'}
-                roughness={0.5}
-                transparent={entity.isGhostMask}
-                opacity={entity.isGhostMask ? 0.3 : 1}
-                emissive={isSelected ? '#0071e3' : '#000000'}
-                emissiveIntensity={isSelected ? 0.3 : 0}
-            />
-        );
+    const handlePointerDown = (e) => {
+        e.stopPropagation(); // MANDATO 4: Interceptar eventos de raycast para interacciones seguras 3D
+        if (selectEntity) selectEntity(id);
     };
-
-    const renderGeometry = () => {
-        if (entity.type === 'sprite') {
-            return <SpriteRenderer color={entity.color} />;
-        }
-
-        const material = getMaterial();
-        const RenderComponent = GEOMETRY_REGISTRY[entity.type] || GEOMETRY_REGISTRY.box;
-        return RenderComponent(material);
-    };
-
-    const handleClick = (e) => {
-        e.stopPropagation();
-
-        if (isEditorMode && !cameraLocked) {
-            if (!isDraggingRef.current) {
-                selectEntity(id);
-            }
-        } else {
-            if (worker) {
-                worker.postMessage({
-                    type: 'SPATIAL_CLICK',
-                    payload: { id: id, point: { x: e.point.x, y: e.point.y, z: e.point.z } }
-                });
-            }
-        }
-    };
-
-    const pos = [entity.position?.[0] ?? 0, entity.position?.[1] ?? 0, entity.position?.[2] ?? 0];
-    const sca = [entity.scale?.[0] ?? 1, entity.scale?.[1] ?? 1, entity.scale?.[2] ?? 1];
 
     return (
-        <group ref={localRef} onClick={handleClick} position={pos} scale={sca}>
-            {isSelected && isEditorMode && !cameraLocked && (
-                <Box args={[1.04, 1.04, 1.04]}>
-                    <meshBasicMaterial color="#0071e3" wireframe opacity={0.4} transparent />
-                </Box>
+        <mesh
+            ref={(node) => {
+                meshRef.current = node;
+                if (isSelected && setTransformTarget) {
+                    setTransformTarget(node);
+                }
+            }}
+            onPointerDown={handlePointerDown}
+            castShadow={!isMask}
+            receiveShadow={!isMask}
+        >
+            {GeometryComponent}
+            <meshStandardMaterial
+                ref={materialRef}
+                color={isSelected ? '#0071e3' : baseColor}
+                emissive={isSelected ? '#0071e3' : '#000000'}
+                emissiveIntensity={isSelected ? 0.2 : 0}
+                roughness={entity.properties?.roughness ?? 0.5}
+                metalness={entity.properties?.metalness ?? 0.1}
+                colorWrite={!isMask} // MANDATO 2: Oclusión híbrida (Ghost Meshes)
+                depthWrite={true}
+                transparent={isMask}
+                opacity={isMask ? 0 : 1}
+            />
+
+            {/* Outline delimitador si está seleccionado */}
+            {isSelected && (
+                <lineSegments>
+                    <edgesGeometry args={[GeometryComponent.type === 'boxGeometry' ? new THREE.BoxGeometry(1, 1, 1) : null]} />
+                    <lineBasicMaterial color="#ffffff" depthTest={false} transparent opacity={0.5} />
+                </lineSegments>
             )}
-            {renderGeometry()}
-        </group>
+        </mesh>
     );
-};
+}
