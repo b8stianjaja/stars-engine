@@ -1,18 +1,40 @@
+// src/components/editor/LiveEditor.jsx
 import { useEffect, useState, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { useSystemicStore } from '../../core/engine.store';
 import { TauriBridge } from '../../core/bridge/bridge.tauri';
+import gsap from 'gsap'; // Inyección del Kernel de Animación
 
 export function LiveEditor({ worker }) {
     const selectedEntityId = useSystemicStore(state => state.workspace.selectedEntityId);
-
-    // MUTACIÓN ARQUITECTÓNICA: Suscripción quirúrgica a una sola entidad.
+    const studioMode = useSystemicStore(state => state.workspace.studioMode); // Monitorear el cambio de modo
     const activeEntity = useSystemicStore(state => state.entities[selectedEntityId]);
     const updateEntityScript = useSystemicStore(state => state.updateEntityScript);
 
     const [localCode, setLocalCode] = useState('');
     const [scriptStatus, setScriptStatus] = useState({ status: 'IDLE', error: null });
+
+    // Captura de referencia física para evitar recálculos de Layout en el DOM
+    const panelRef = useRef(null);
     const editorRef = useRef(null);
+
+    // CONTROL DE ENTRADA Y SALIDA CON CURVAS EXPONENCIALES (GSAP)
+    useEffect(() => {
+        if (!panelRef.current) return;
+
+        if (studioMode === 'logic') {
+            // Entrada Premium: Desplazamiento ultra rápido que desacelera de forma elástica
+            gsap.fromTo(panelRef.current,
+                { xPercent: 100, opacity: 0 },
+                { xPercent: 0, opacity: 1, duration: 0.5, ease: "power4.out" }
+            );
+        } else {
+            // Salida limpia acelerando uniformemente hacia la derecha
+            gsap.to(panelRef.current, {
+                xPercent: 100, opacity: 0, duration: 0.35, ease: "power2.in"
+            });
+        }
+    }, [studioMode]);
 
     // Sincronización inmutable del código al cambiar de selección
     useEffect(() => {
@@ -42,13 +64,9 @@ export function LiveEditor({ worker }) {
 
     const handleCompileAndInject = async () => {
         if (!selectedEntityId || !localCode.trim()) return;
-
         setScriptStatus({ status: 'COMPILING', error: null });
-
-        // 1. Mutación Atómica en Almacén
         updateEntityScript(selectedEntityId, localCode);
 
-        // 2. Despacho al Web Worker (Kernel)
         if (worker) {
             worker.postMessage({
                 type: 'INJECT_SCRIPT',
@@ -56,7 +74,6 @@ export function LiveEditor({ worker }) {
             });
         }
 
-        // 3. Persistencia asíncrona silenciosa (Tauri IO)
         try {
             await TauriBridge.saveScript(`${selectedEntityId}.js`, localCode);
         } catch (e) {
@@ -64,7 +81,6 @@ export function LiveEditor({ worker }) {
         }
     };
 
-    // Diccionario visual de estados de compilación (Apple Human Interface Guidelines)
     const getStatusConfig = () => {
         switch (scriptStatus.status) {
             case 'RUNNING': return { color: '#34c759', bg: 'rgba(52, 199, 89, 0.1)', text: 'En Ejecución' };
@@ -77,12 +93,22 @@ export function LiveEditor({ worker }) {
     };
 
     const statusConfig = getStatusConfig();
-    const isDark = document.documentElement.classList.contains('dark-theme'); // Detección de tema raíz
+    const isDark = document.documentElement.classList.contains('dark-theme');
 
     return (
-        <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-app)' }}>
-
-            {/* HEADER DE HERRAMIENTAS - CLEAN UX */}
+        <div
+            ref={panelRef} // Enlace estructural al Kernel de GSAP
+            style={{
+                height: '100%',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                background: 'var(--bg-app)',
+                willChange: 'transform, opacity', // AISLAMIENTO DE CAPA DE RENDERIZADO EN GPU
+                backfaceVisibility: 'hidden'
+            }}
+        >
+            {/* HEADER DE HERRAMIENTAS */}
             <div style={{
                 height: '44px', background: 'var(--bg-panel)', borderBottom: '1px solid var(--border)',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', flexShrink: 0,
@@ -112,28 +138,19 @@ export function LiveEditor({ worker }) {
                     onClick={handleCompileAndInject}
                     disabled={!selectedEntityId || scriptStatus.status === 'COMPILING'}
                     style={{
-                        padding: '6px 14px',
-                        background: selectedEntityId ? 'var(--accent)' : 'var(--bg-input)',
-                        border: 'none',
-                        color: selectedEntityId ? '#fff' : 'var(--text-secondary)',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        borderRadius: '14px',
-                        cursor: selectedEntityId ? 'pointer' : 'not-allowed',
-                        transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
-                        display: 'flex', alignItems: 'center', gap: '6px',
-                        boxShadow: selectedEntityId ? '0 2px 6px rgba(0, 113, 227, 0.3)' : 'none',
-                        opacity: scriptStatus.status === 'COMPILING' ? 0.7 : 1
+                        padding: '6px 14px', background: selectedEntityId ? 'var(--accent)' : 'var(--bg-input)',
+                        border: 'none', color: selectedEntityId ? '#fff' : 'var(--text-secondary)', fontSize: '12px',
+                        fontWeight: '600', borderRadius: '14px', cursor: selectedEntityId ? 'pointer' : 'not-allowed',
+                        transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)', display: 'flex', alignItems: 'center', gap: '6px',
+                        boxShadow: selectedEntityId ? '0 2px 6px rgba(0, 113, 227, 0.3)' : 'none'
                     }}
-                    onMouseEnter={(e) => { if (selectedEntityId) e.currentTarget.style.transform = 'scale(1.02)'; }}
-                    onMouseLeave={(e) => { if (selectedEntityId) e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3v18l15-9L5 3z" /></svg>
                     Ejecutar Código
                 </button>
             </div>
 
-            {/* BARRA DE ERROR CONTEXTUAL (Aparece solo si hay error lúdico/sintáctico) */}
+            {/* BARRA DE ERROR CONTEXTUAL */}
             {scriptStatus.error && (
                 <div style={{
                     background: '#fff0f0', borderBottom: '1px solid #ffcccc', padding: '8px 16px',
@@ -160,18 +177,10 @@ export function LiveEditor({ worker }) {
                         });
                     }}
                     options={{
-                        minimap: { enabled: false },
-                        fontSize: 13,
-                        fontFamily: '"SF Mono", "Fira Code", monospace',
-                        fontLigatures: true,
-                        readOnly: !selectedEntityId,
-                        domReadOnly: !selectedEntityId,
-                        padding: { top: 16 },
-                        scrollBeyondLastLine: false,
-                        smoothScrolling: true,
-                        cursorBlinking: "smooth",
-                        renderLineHighlight: "all",
-                        lineHeight: 22
+                        minimap: { enabled: false }, fontSize: 13, fontFamily: '"SF Mono", "Fira Code", monospace',
+                        fontLigatures: true, readOnly: !selectedEntityId, domReadOnly: !selectedEntityId,
+                        padding: { top: 16 }, scrollBeyondLastLine: false, smoothScrolling: true,
+                        cursorBlinking: "smooth", renderLineHighlight: "all", lineHeight: 22
                     }}
                 />
             </div>

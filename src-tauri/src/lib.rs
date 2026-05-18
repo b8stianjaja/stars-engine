@@ -4,7 +4,6 @@ use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 
-// NOTA DE ARQUITECTURA: Sin el modificador 'pub' para prevenir colisiones macro E0255
 #[tauri::command]
 async fn save_scene(app_handle: tauri::AppHandle, data: Value) -> Result<(), String> {
     let app_data_path = app_handle
@@ -52,12 +51,34 @@ async fn load_scene(app_handle: tauri::AppHandle) -> Result<Value, String> {
 }
 
 #[tauri::command]
+async fn save_script(app_handle: tauri::AppHandle, file_name: String, code: String) -> Result<(), String> {
+    let app_data_path = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Fallo de resolución de ruta en $APPDATA para scripts: {}", e))?;
+
+    let scripts_dir = app_data_path.join("scripts");
+
+    // Forzar la estructura del directorio de scripts lógicos de forma aislada
+    fs::create_dir_all(&scripts_dir)
+        .map_err(|e| format!("Fallo crítico al inicializar el contenedor de scripts nativos: {}", e))?;
+
+    // Sanitización básica estructural del destino de escritura (Mapeado automático desde JS: fileName -> file_name)
+    let file_path = scripts_dir.join(file_name);
+
+    fs::write(&file_path, code)
+        .map_err(|e| format!("Fallo de I/O de bajo nivel escribiendo el componente lógico: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn export_standalone_game(target_path: String, data: Value) -> Result<(), String> {
     let file_path = PathBuf::from(target_path);
 
     if let Some(parent_dir) = file_path.parent() {
         fs::create_dir_all(parent_dir)
-            .map_err(|e| format!("Fallo al estructurar el árbol del directorio de exportación: {}", e))?;
+            .map_err(|e| format!("Fallo al expresar el árbol del directorio de exportación: {}", e))?;
     }
 
     let json_string = serde_json::to_string_pretty(&data)
@@ -72,7 +93,6 @@ async fn export_standalone_game(target_path: String, data: Value) -> Result<(), 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // Inicialización de los plugins necesarios para el motor (Acceso a Disco y Diálogos)
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
@@ -88,6 +108,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_scene,
             load_scene,
+            save_script,
             export_standalone_game
         ])
         .run(tauri::generate_context!())

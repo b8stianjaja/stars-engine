@@ -10,7 +10,7 @@ import { ProjectSystemControls } from './components/editor/ProjectSystemControls
 import { InputBridge } from './core/bridge/input.bridge.js';
 import { TelemetryHUD } from './components/debug/TelemetryHUD';
 
-// NUEVOS MÓDULOS DEL ENTORNO COLABORATIVO GRADO APPLE
+// ENTORNO COLABORATIVO GRADO APPLE
 import { CollaborationHeader } from './components/editor/CollaborationHeader';
 import { DataInspectorPanel } from './components/editor/DataInspectorPanel';
 import { initSyncClient } from './core/bridge/sync.client';
@@ -131,10 +131,10 @@ export function App() {
                 * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
             `}</style>
 
-            {/* HIPERVISOR DE TELEMETRÍA Y CONTROL DE RED SUPERIOR */}
+            {/* CABECERA DE TELEMETRÍA SUPERIOR */}
             <CollaborationHeader worker={kernelWorker} />
 
-            {/* BARRA INFERIOR SECUNDARIA DE PERSISTENCIA */}
+            {/* BARRA SECUNDARIA DE CONTROLES DE PERSISTENCIA */}
             <ProjectSystemControls worker={kernelWorker} />
 
             {/* ESPACIO DE TRABAJO PRINCIPAL MULTIPANEL */}
@@ -142,7 +142,7 @@ export function App() {
                 display: 'flex',
                 flex: 1,
                 width: '100%',
-                height: 'calc(100% - 79px)', // Descuenta con exactitud CollaborationHeader (48px) + ProjectSystemControls (31px)
+                height: 'calc(100% - 79px)', // Altura exacta para acoplar ambas barras superiores de forma rígida
                 overflow: 'hidden',
                 position: 'relative'
             }}>

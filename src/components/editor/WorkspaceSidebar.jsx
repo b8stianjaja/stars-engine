@@ -1,8 +1,8 @@
+// src/components/editor/WorkspaceSidebar.jsx
 import { useShallow } from 'zustand/react/shallow';
 import { useSystemicStore } from '../../core/engine.store';
 import { ArtistStudioPanel } from './ArtistStudioPanel';
 import { DeveloperStudioPanel } from './DeveloperStudioPanel';
-import { ProjectSystemControls } from './ProjectSystemControls';
 
 export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
     const studioMode = useSystemicStore(useShallow(state => state.workspace.studioMode));
@@ -47,9 +47,6 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* Pipeline Serializador */}
-                    <ProjectSystemControls worker={worker} />
-
                     {/* Toggle de Tema Nativo */}
                     <button
                         onClick={toggleTheme}
