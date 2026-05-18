@@ -167,27 +167,51 @@ self.onmessage = (e) => {
             break;
 
         case 'CLEAR_PHYSICS_WORLD':
-            // 1. Vaciar por completo el mapa local de ejecución del Worker
             entities.clear();
-            // 2. Limpiar el SharedArrayBuffer para evitar estelas o fantasmas visuales en el viewport 3D
             if (physicsArray) {
                 physicsArray.fill(0);
             }
             break;
 
-        case 'ADD_ENTITY_LOGIC':
+        case 'ADD_ENTITY_LOGIC': {
+            // Re-hidratar posiciones cinemáticas directas al Stride lineal del buffer compartido
+            const startX = payload.x ?? payload.position?.[0] ?? 0;
+            const startY = payload.y ?? payload.position?.[1] ?? 0;
+            const startZ = payload.z ?? payload.position?.[2] ?? 0;
+
+            const rotX = payload.rotX ?? payload.quaternion?.[0] ?? 0;
+            const rotY = payload.rotY ?? payload.quaternion?.[1] ?? 0;
+            const rotZ = payload.rotZ ?? payload.quaternion?.[2] ?? 0;
+            const rotW = payload.rotW ?? payload.quaternion?.[3] ?? 1;
+
+            const scaleX = payload.scaleX || (payload.scale?.[0]) || 1;
+            const scaleY = payload.scaleY || (payload.scale?.[1]) || 1;
+            const scaleZ = payload.scaleZ || (payload.scale?.[2]) || 1;
+
             if (physicsArray) {
                 const offset = payload.index * 16;
-                physicsArray[offset + 0] = payload.x ?? payload.position?.[0] ?? 0;
-                physicsArray[offset + 1] = payload.y ?? payload.position?.[1] ?? 0;
-                physicsArray[offset + 2] = payload.z ?? payload.position?.[2] ?? 0;
-                physicsArray[offset + 3] = payload.rotX ?? 0;
-                physicsArray[offset + 4] = payload.rotY ?? 0;
-                physicsArray[offset + 5] = payload.rotZ ?? 0;
-                physicsArray[offset + 6] = payload.rotW ?? 1;
-                physicsArray[offset + 7] = payload.scaleX || (payload.scale?.[0]) || 1;
-                physicsArray[offset + 8] = payload.scaleY || (payload.scale?.[1]) || 1;
-                physicsArray[offset + 9] = payload.scaleZ || (payload.scale?.[2]) || 1;
+                physicsArray[offset + 0] = startX;
+                physicsArray[offset + 1] = startY;
+                physicsArray[offset + 2] = startZ;
+                physicsArray[offset + 3] = rotX;
+                physicsArray[offset + 4] = rotY;
+                physicsArray[offset + 5] = rotZ;
+                physicsArray[offset + 6] = rotW;
+                physicsArray[offset + 7] = scaleX;
+                physicsArray[offset + 8] = scaleY;
+                physicsArray[offset + 9] = scaleZ;
+                physicsArray[offset + 10] = payload.properties?.lastVelocityY ?? 0;
+                physicsArray[offset + 11] = payload.properties?.isGrounded ? 1.0 : 0.0;
+            }
+
+            // RE-COMPILACIÓN AUTOMÁTICA EN TRÁNSITO DE ESCENAS (MANDATO HOT-LOGIC)
+            let compiledLogicFn = null;
+            if (payload.scriptCode) {
+                try {
+                    compiledLogicFn = new Function('entity', 'deltaTime', 'Engine', payload.scriptCode);
+                } catch (err) {
+                    self.postMessage({ type: 'SCRIPT_STATUS', payload: { id: payload.id, status: 'COMPILE_ERROR', error: err.message } });
+                }
             }
 
             entities.set(payload.id, {
@@ -195,19 +219,16 @@ self.onmessage = (e) => {
                 index: payload.index,
                 name: payload.name ?? 'Unmanaged Actor',
                 type: payload.type ?? 'box',
-                updateLogic: null,
+                updateLogic: compiledLogicFn,
                 properties: payload.properties ?? {},
-                x: payload.x ?? payload.position?.[0] ?? 0,
-                y: payload.y ?? payload.position?.[1] ?? 0,
-                z: payload.z ?? payload.position?.[2] ?? 0,
-                vx: 0, vy: 0, vz: 0,
-                isGrounded: false,
-                rotX: payload.rotX ?? 0, rotY: payload.rotY ?? 0, rotZ: payload.rotZ ?? 0, rotW: payload.rotW ?? 1,
-                scaleX: payload.scaleX || (payload.scale?.[0]) || 1,
-                scaleY: payload.scaleY || (payload.scale?.[1]) || 1,
-                scaleZ: payload.scaleZ || (payload.scale?.[2]) || 1
+                x: startX, y: startY, z: startZ,
+                vx: 0, vy: payload.properties?.lastVelocityY ?? 0, vz: 0,
+                isGrounded: payload.properties?.isGrounded ?? false,
+                rotX, rotY, rotZ, rotW,
+                scaleX, scaleY, scaleZ
             });
             break;
+        }
 
         case 'UPDATE_PHYSICAL_POS':
             if (entities.has(payload.id)) {

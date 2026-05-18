@@ -15,9 +15,6 @@ export const createSceneSlice = (set, get) => ({
         }
     },
 
-    /**
-     * Instancia un contenedor estanco de nivel dentro del bundle del proyecto.
-     */
     createScene: (name) => set((state) => {
         const id = `scene_${Date.now()}`;
         const newScenes = { ...state.sceneRegistry.scenes };
@@ -26,15 +23,9 @@ export const createSceneSlice = (set, get) => ({
             entities: {},
             canvasLayers: { background: null, midground: null, foreground: null }
         };
-        return {
-            sceneRegistry: { ...state.sceneRegistry, scenes: newScenes }
-        };
+        return { sceneRegistry: { ...state.sceneRegistry, scenes: newScenes } };
     }),
 
-    /**
-     * Commitea los buffers de ilustración actuales del DOM y las entidades de Zustand
-     * dentro del caché de la escena activa antes de realizar una conmutación.
-     */
     commitActiveSceneSnapshot: () => set((state) => {
         const currentSceneId = state.sceneRegistry.currentSceneId;
         const currentSnapshot = SceneSerializer.serializeActiveViewportState();
@@ -50,31 +41,28 @@ export const createSceneSlice = (set, get) => ({
         return { sceneRegistry: { ...state.sceneRegistry, scenes: updatedScenes } };
     }),
 
-    /**
-     * Transiciona el motor entero hacia un nuevo mapa. Purga el Web Worker,
-     * reclama el pool de índices del SharedArrayBuffer y re-hidrata las texturas 2.5D.
-     */
     switchScene: async (targetSceneId, worker) => {
         const store = get();
         const currentSceneId = store.sceneRegistry.currentSceneId;
 
         if (currentSceneId === targetSceneId) return;
 
-        // 1. Congelar el estado visual y físico del nivel del que nos estamos retirando
+        // 1. Congelar estado real del nivel saliente
         store.commitActiveSceneSnapshot();
 
-        // Re-obtener el registro actualizado tras el commit
         const refreshedStore = get();
         const targetSnapshot = refreshedStore.sceneRegistry.scenes[targetSceneId];
         if (!targetSnapshot) return;
 
-        // 2. Limpiar el Kernel Físico: Notificar al Worker la evacuación masiva de actores
+        // 2. Limpiar el Kernel Físico del Worker
         if (worker) {
             worker.postMessage({ type: 'CLEAR_PHYSICS_WORLD' });
         }
 
-        // 3. Resetear el pool indexado de Zustand y liberar el direccionamiento del Stride
-        const clearedFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i);
+        // 3. PROTECCIÓN CRÍTICA DE POOL: Filtrar índices ocupados por la escena destino
+        const usedIndices = Object.values(targetSnapshot.entities || {}).map(e => e.index);
+        const clearedFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i)
+            .filter(idx => !usedIndices.includes(idx));
 
         set({
             entities: {},
@@ -83,11 +71,10 @@ export const createSceneSlice = (set, get) => ({
             sceneRegistry: { ...refreshedStore.sceneRegistry, currentSceneId: targetSceneId }
         });
 
-        // 4. Hidratar Zustand y el Web Worker con la base de datos de la escena de destino
+        // 4. Hidratar e inyectar al Worker conservando estados y códigos lógicos
         const nextStore = get();
         Object.keys(targetSnapshot.entities || {}).forEach(id => {
             const entityData = targetSnapshot.entities[id];
-            // Inyectamos con bandera remota para evitar saturar sockets locales en la sincronización
             nextStore.registerEntity(id, entityData, true);
 
             if (worker) {
@@ -98,7 +85,7 @@ export const createSceneSlice = (set, get) => ({
             }
         });
 
-        // 5. Flujo de Re-Pintado Síncrono de las Capas de Ilustración del Artista
+        // 5. Flujo de Re-Pintado Síncrono de Capas
         ['background', 'midground', 'foreground'].forEach(layerId => {
             const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
             if (canvasElement) {
@@ -119,14 +106,10 @@ export const createSceneSlice = (set, get) => ({
         console.log(`[SceneSystem] Conmutación de contexto completada con éxito. Target: ${targetSceneId}`);
     },
 
-    /**
-     * Sobreescribe el registro de escenas completo al cargar un proyecto empaquetado (.stars) desde disco
-     */
     hydrateFullStoryboard: (bundleData, worker) => {
         const store = get();
         if (!bundleData || !bundleData.sceneRegistry) return;
 
-        // Vaciar el entorno actual
         if (worker) worker.postMessage({ type: 'CLEAR_PHYSICS_WORLD' });
 
         set({
@@ -138,12 +121,15 @@ export const createSceneSlice = (set, get) => ({
             }
         });
 
-        // Forzar la hidratación visual de la escena que quedó marcada como activa en el bundle
         const activeSceneId = bundleData.sceneRegistry.currentSceneId;
         const activeSnapshot = bundleData.sceneRegistry.scenes[activeSceneId];
 
         if (activeSnapshot) {
-            const currentFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i);
+            // Sincronizar el pool en hidratación de disco duro
+            const usedIndices = Object.values(activeSnapshot.entities || {}).map(e => e.index);
+            const currentFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i)
+                .filter(idx => !usedIndices.includes(idx));
+
             set({ freeIndices: currentFreeIndices });
 
             const updatedStore = get();

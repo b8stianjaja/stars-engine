@@ -1,6 +1,7 @@
 // src/core/bridge/serializer.js
 import { useSystemicStore } from '../engine.store';
 import { TauriBridge } from './bridge.tauri';
+import { EngineMemory } from '../config/memory.config';
 
 export class SceneSerializer {
     /**
@@ -18,7 +19,6 @@ export class SceneSerializer {
                     const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height);
                     const pixelBuffer = new Uint32Array(imageData.data.buffer);
 
-                    // Comprobación de canal alfa para no almacenar Base64 de capas vacías
                     const hasPixels = pixelBuffer.some(pixel => pixel !== 0);
                     if (hasPixels) {
                         layers[layerId] = canvasElement.toDataURL('image/png');
@@ -30,25 +30,51 @@ export class SceneSerializer {
     }
 
     /**
-     * Serializa únicamente el estado volátil del Viewport activo.
-     * Utilizado para los guardados en caché intermedios durante los cambios de nivel.
+     * Intercepta el SharedArrayBuffer y extrae los datos cinemáticos reales
+     * mutados por el Web Worker para sincronizarlos en el snapshot inmutable.
+     */
+    static getLiveSynchronizedEntities() {
+        const store = useSystemicStore.getState();
+        const entitiesSnapshot = JSON.parse(JSON.stringify(store.entities ?? {}));
+
+        if (EngineMemory.physicsBuffer) {
+            const floatView = new Float32Array(EngineMemory.physicsBuffer);
+
+            Object.keys(entitiesSnapshot).forEach(id => {
+                const ent = entitiesSnapshot[id];
+                const offset = ent.index * 16;
+
+                // Extraer directamente del Stride de memoria real de la GPU/Worker
+                ent.position = [floatView[offset + 0], floatView[offset + 1], floatView[floatView[offset + 2] ? offset + 2 : offset + 2]];
+                ent.quaternion = [floatView[offset + 3], floatView[offset + 4], floatView[offset + 5], floatView[offset + 6]];
+                ent.scale = [floatView[offset + 7], floatView[offset + 8], floatView[offset + 9]];
+
+                if (ent.properties) {
+                    ent.properties.lastVelocityY = floatView[offset + 10];
+                    ent.properties.isGrounded = floatView[offset + 11] === 1.0;
+                }
+            });
+        }
+        return entitiesSnapshot;
+    }
+
+    /**
+     * Serializa únicamente el estado volátil del Viewport activo extrayendo la física real.
      */
     static serializeActiveViewportState() {
-        const store = useSystemicStore.getState();
         return {
-            entities: store.entities ?? {},
+            entities: this.getLiveSynchronizedEntities(),
             canvasLayers: this.captureCanvasLayers()
         };
     }
 
     /**
      * Compila la totalidad del Proyecto de Videojuego (El Storyboard completo).
-     * @param {boolean} forceRuntime - Remueve paneles de edición si se exporta el juego compilado
      */
     static serializeFullProjectBundle(forceRuntime = false) {
         const store = useSystemicStore.getState();
 
-        // Sincronizar la escena que se está editando actualmente en el registro antes del volcado a disco
+        // Commitear el viewport activo extrayendo la memoria real antes del volcado masivo
         store.commitActiveSceneSnapshot();
         const refreshedStore = useSystemicStore.getState();
 
@@ -63,17 +89,11 @@ export class SceneSerializer {
         };
     }
 
-    /**
-     * Salva el Storyboard completo en la persistencia del puente híbrido.
-     */
     static async saveCurrentScene() {
         const fullBundle = this.serializeFullProjectBundle(false);
         return await TauriBridge.saveScene(fullBundle);
     }
 
-    /**
-     * Carga y reconstruye el árbol completo de niveles e hidrata el motor en caliente.
-     */
     static async loadCurrentScene(worker) {
         const loadedBundle = await TauriBridge.loadScene();
         if (!loadedBundle || !loadedBundle.sceneRegistry) return false;
@@ -83,9 +103,6 @@ export class SceneSerializer {
         return true;
     }
 
-    /**
-     * PIPELINE DE EXPORTACIÓN FINAL (.EXE): Duplica el player nativo e inyecta el Storyboard completo.
-     */
     static async exportSceneToFile() {
         const runtimeBundle = this.serializeFullProjectBundle(true);
         return await TauriBridge.exportStandaloneScene(runtimeBundle);
