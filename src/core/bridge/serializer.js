@@ -3,131 +3,122 @@ import { useSystemicStore } from '../engine.store';
 import { TauriBridge } from './bridge.tauri';
 
 export class SceneSerializer {
-
     /**
-     * Extrae un canvas del DOM y lo convierte en Base64 (PNG transparente)
+     * Captura la trinidad de datos de memoria y empaqueta el estado actual del motor.
+     * @param {boolean} forceRuntimeLayout - Fuerza al payload a comportarse como juego final ejecutable
+     * @returns {Object} Proyecto unificado listo para distribución o guardado local
      */
-    static getCanvasBase64(layerId) {
-        const canvas = document.getElementById(`canvas-${layerId}`);
-        if (!canvas) return null;
+    static serializeWorkspace(forceRuntimeLayout = false) {
+        const store = useSystemicStore.getState();
 
-        // Comprobamos si el canvas está vacío para no guardar memoria inútil
-        const ctx = canvas.getContext('2d');
-        const buffer = new Uint32Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer);
-        const isBlank = !buffer.some(color => color !== 0);
-
-        if (isBlank) return null;
-        return canvas.toDataURL('image/png');
-    }
-
-    /**
-     * Inyecta un Base64 de vuelta a un canvas físico
-     */
-    static loadCanvasFromBase64(layerId, base64Data) {
-        if (!base64Data) return;
-        const canvas = document.getElementById(`canvas-${layerId}`);
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        img.onload = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        };
-        img.src = base64Data;
-    }
-
-    /**
-     * Empaqueta el estado 3D y las texturas 2D hacia Tauri
-     */
-    static async saveCurrentScene() {
-        console.log("[Serializer] Iniciando empaquetado de escena híbrida...");
-        const state = useSystemicStore.getState();
-
-        const sceneData = {
-            version: "1.0",
-            camera: state.workspace.directorCameraData,
-            entities: state.entities,
-            layers: {
-                background: this.getCanvasBase64('background'),
-                midground: this.getCanvasBase64('midground'),
-                foreground: this.getCanvasBase64('foreground')
+        const projectPackage = {
+            engineVersion: "1.0.0",
+            timestamp: Date.now(),
+            editorVisible: !forceRuntimeLayout, // Apaga la UI si se genera un Runtime compilado
+            workspace: {
+                studioMode: forceRuntimeLayout ? "design" : store.workspace.studioMode,
+                selectedEntityId: null
+            },
+            layerPlayback: {
+                paintMode: store.layerPlayback.paintMode,
+                activeLayer: store.layerPlayback.activeLayer,
+                playbackSpeed: store.layerPlayback.playbackSpeed
+            },
+            entities: store.entities ?? {},
+            canvasLayers: {
+                background: null,
+                midground: null,
+                foreground: null
             }
         };
 
-        const success = await TauriBridge.saveScene(sceneData);
-        if (success) {
-            console.log("[Serializer] Escena empaquetada exitosamente.");
-        }
-    }
+        // Captura y serialización de los lienzos dinámicos de ilustración 2D
+        ['background', 'midground', 'foreground'].forEach(layerId => {
+            const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
+            if (canvasElement) {
+                const context = canvasElement.getContext('2d');
+                if (context) {
+                    const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                    const buffer = new Uint32Array(imageData.data.buffer);
 
-    /**
-     * Lee desde Tauri y restaura la memoria 3D y el DOM
-     */
-    static async loadCurrentScene(worker) {
-        console.log("[Serializer] Solicitando descompresión de escena...");
-        const sceneData = await TauriBridge.loadScene();
-
-        if (!sceneData) {
-            console.warn("[Serializer] No se encontró escena en el disco.");
-            return;
-        }
-
-        // 1. Restaurar Zustand (El estado de React)
-        useSystemicStore.getState().loadSceneState(sceneData);
-
-        // 2. Restaurar Lienzos 2D (El DOM Físico)
-        if (sceneData.layers) {
-            this.loadCanvasFromBase64('background', sceneData.layers.background);
-            this.loadCanvasFromBase64('midground', sceneData.layers.midground);
-            this.loadCanvasFromBase64('foreground', sceneData.layers.foreground);
-        }
-
-        // 3. Restaurar Memoria Física (El Web Worker)
-        if (worker) {
-            for (const [id, entity] of Object.entries(sceneData.entities)) {
-                worker.postMessage({
-                    type: 'ADD_ENTITY_LOGIC',
-                    payload: { ...entity, id }
-                });
-
-                // Si tenía scripts lógicos inyectados, recomplilarlos
-                if (entity.scriptCode) {
-                    worker.postMessage({
-                        type: 'INJECT_SCRIPT',
-                        payload: { id, code: entity.scriptCode }
-                    });
+                    // Optimización de asignación: Evita procesar Base64 de capas vacías sin píxeles pintados
+                    const hasData = buffer.some(pixel => pixel !== 0);
+                    if (hasData) {
+                        projectPackage.canvasLayers[layerId] = canvasElement.toDataURL('image/png');
+                    }
                 }
             }
-        }
+        });
 
-        console.log("[Serializer] Escena restaurada e inyectada en el Kernel.");
+        return projectPackage;
     }
 
     /**
-     * Empaqueta de forma absoluta la escena actual y abre el diálogo nativo para exportar el juego finalizado
+     * Guarda el estado de la sesión actual en el canal de persistencia seguro del puente
+     */
+    static async saveCurrentScene() {
+        const payload = this.serializeWorkspace(false);
+        return await TauriBridge.saveScene(payload);
+    }
+
+    /**
+     * Restaura el estado total de la simulación e hidrata el buffer compartido a partir de un archivo
+     */
+    static async loadCurrentScene(worker) {
+        const data = await TauriBridge.loadScene();
+        if (!data) return false;
+
+        const store = useSystemicStore.getState();
+
+        // 1. Purgar el mapa de entidades activo en el núcleo de Zustand
+        Object.keys(store.entities).forEach(id => store.removeEntity(id));
+
+        // 2. Re-inyectar las entidades cargadas al buffer a 60Hz e hidratar hilos concurrentes
+        if (data.entities) {
+            Object.keys(data.entities).forEach(id => {
+                const entity = data.entities[id];
+                store.registerEntity(id, entity);
+
+                if (worker) {
+                    worker.postMessage({
+                        type: 'ADD_ENTITY_LOGIC',
+                        payload: { id, ...entity }
+                    });
+                }
+            });
+        }
+
+        // 3. Re-pintar de forma síncrona los assets de ilustración 2D en los elementos del DOM
+        if (data.canvasLayers) {
+            Object.keys(data.canvasLayers).forEach(layerId => {
+                const dataUrl = data.canvasLayers[layerId];
+                const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
+                if (canvasElement && dataUrl) {
+                    const context = canvasElement.getContext('2d');
+                    const img = new Image();
+                    img.onload = () => {
+                        context.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                        context.drawImage(img, 0, 0);
+                    };
+                    img.src = dataUrl;
+                }
+            });
+        }
+
+        // 4. Restaurar variables operativas del espacio de trabajo
+        if (data.workspace?.studioMode) {
+            store.setStudioMode(data.workspace.studioMode);
+        }
+
+        return true;
+    }
+
+    /**
+     * AUTOMATIZACIÓN DE EXPORTACIÓN NATIVA: Genera el ejecutable (.exe) final y empaqueta la carga
      */
     static async exportSceneToFile() {
-        console.log("[Serializer] Generando compilado listo para distribución...");
-        const state = useSystemicStore.getState();
-
-        const bundleData = {
-            version: "1.0-RELEASE",
-            timestamp: Date.now(),
-            camera: state.workspace.directorCameraData ?? null,
-            entities: state.entities ?? {},
-            layers: {
-                background: this.getCanvasBase64('background'),
-                midground: this.getCanvasBase64('midground'),
-                foreground: this.getCanvasBase64('foreground')
-            }
-        };
-
-        const success = await TauriBridge.exportStandaloneScene(bundleData);
-        if (success) {
-            console.log("[Serializer] Exportación standalone completada sin errores.");
-        } else {
-            console.warn("[Serializer] El proceso de exportación fue interrumpido o falló.");
-        }
+        // Generar un payload forzando el modo ejecutable final sin UI lateral
+        const runtimePayload = this.serializeWorkspace(true);
+        return await TauriBridge.exportStandaloneScene(runtimePayload);
     }
 }
