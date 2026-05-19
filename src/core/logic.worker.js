@@ -2,6 +2,7 @@
 
 let physicsArray = null;
 let inputArray = null;
+let int32SyncArray = null; // Integer view over shared memory for native atomic operations
 const entities = new Map();
 
 const eventQueue = {
@@ -14,7 +15,6 @@ const registerB = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
 const spatialQueryBuffer = new Array(2000).fill(null).map(() => ({ id: "", name: "", type: "", x: 0, y: 0, z: 0 }));
 
 const PhysicsCore = {
-    // Writes directly to an existing target register object without allocating memory
     writeAABB: (ent, outRegister) => {
         const halfX = (ent.scaleX ?? 1) / 2;
         const halfY = (ent.scaleY ?? 1) / 2;
@@ -124,7 +124,6 @@ const Engine = {
                     }
                 }
             }
-            // Returns a slice view of the pre-allocated buffer array to avoid GC allocations
             return spatialQueryBuffer.slice(0, count);
         }
     }
@@ -141,13 +140,18 @@ function physicsLoop() {
     lastTime = now;
 
     while (accumulator >= TICK_RATE) {
-        if (physicsArray) {
+        if (physicsArray && int32SyncArray) {
             for (const [id, data] of entities) {
                 if (data.updateLogic) {
                     try {
                         data.updateLogic(data, FIXED_DT, Engine);
 
                         const offset = data.index * 16;
+                        const syncIndex = offset + 15;
+
+                        // Enforce explicit Native Atomic Write Sequence (Transaction Lock)
+                        Atomics.store(int32SyncArray, syncIndex, 1);
+
                         physicsArray[offset + 0] = data.x;
                         physicsArray[offset + 1] = data.y;
                         physicsArray[offset + 2] = data.z;
@@ -163,6 +167,10 @@ function physicsLoop() {
 
                         physicsArray[offset + 10] = data.vy ?? 0;
                         physicsArray[offset + 11] = data.isGrounded ? 1.0 : 0.0;
+
+                        // Release Native Atomic Transaction Lock
+                        Atomics.store(int32SyncArray, syncIndex, 0);
+
                     } catch (e) {
                         self.postMessage({ type: 'SCRIPT_STATUS', payload: { id, status: 'RUNTIME_ERROR', error: e.message } });
                     }
@@ -183,6 +191,7 @@ self.onmessage = (e) => {
     switch (type) {
         case 'INIT_MEM':
             physicsArray = new Float32Array(payload.physics);
+            int32SyncArray = new Int32Array(payload.physics);
             inputArray = new Int32Array(payload.input);
             break;
 
@@ -207,8 +216,12 @@ self.onmessage = (e) => {
             const scaleY = payload.scaleY ?? 1;
             const scaleZ = payload.scaleZ ?? 1;
 
-            if (physicsArray) {
+            if (physicsArray && int32SyncArray) {
                 const offset = payload.index * 16;
+                const syncIndex = offset + 15;
+
+                Atomics.store(int32SyncArray, syncIndex, 1);
+
                 physicsArray[offset + 0] = startX;
                 physicsArray[offset + 1] = startY;
                 physicsArray[offset + 2] = startZ;
@@ -221,6 +234,8 @@ self.onmessage = (e) => {
                 physicsArray[offset + 9] = scaleZ;
                 physicsArray[offset + 10] = payload.properties?.lastVelocityY ?? 0;
                 physicsArray[offset + 11] = payload.properties?.isGrounded ? 1.0 : 0.0;
+
+                Atomics.store(int32SyncArray, syncIndex, 0);
             }
 
             let compiledLogicFn = null;
@@ -259,14 +274,18 @@ self.onmessage = (e) => {
                 if (payload.scaleY !== undefined) ent.scaleY = payload.scaleY;
                 if (payload.scaleZ !== undefined) ent.scaleZ = payload.scaleZ;
 
-                if (physicsArray) {
+                if (physicsArray && int32SyncArray) {
                     const offset = ent.index * 16;
+                    const syncIndex = offset + 15;
+
+                    Atomics.store(int32SyncArray, syncIndex, 1);
                     if (payload.x !== undefined) physicsArray[offset + 0] = payload.x;
                     if (payload.y !== undefined) physicsArray[offset + 1] = payload.y;
                     if (payload.z !== undefined) physicsArray[offset + 2] = payload.z;
                     if (payload.scaleX !== undefined) physicsArray[offset + 7] = payload.scaleX;
                     if (payload.scaleY !== undefined) physicsArray[offset + 8] = payload.scaleY;
                     if (payload.scaleZ !== undefined) physicsArray[offset + 9] = payload.scaleZ;
+                    Atomics.store(int32SyncArray, syncIndex, 0);
                 }
             }
             break;

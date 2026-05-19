@@ -3,10 +3,6 @@ import { EngineMemory } from '../config/memory.config';
 import { TauriBridge } from './bridge.tauri';
 
 export class SceneSerializer {
-    /**
-     * Captura las capas de ilustración activas en el DOM de forma aislada.
-     * @returns {Object} Diccionario con las tres capas codificadas en Base64 PNG
-     */
     static captureCanvasLayers() {
         const layers = { background: null, midground: null, foreground: null };
 
@@ -33,23 +29,31 @@ export class SceneSerializer {
     }
 
     /**
-     * Intercepta el SharedArrayBuffer y extrae los datos cinemáticos reales
-     * mutados por el Web Worker para sincronizarlos en el snapshot inmutable.
-     * @param {Object} currentEntities - Reference to current state entities to map against.
-     * @returns {Object} Deep clone of entities combined with real-time physical telemetry.
+     * Intercepts the SharedArrayBuffer executing native Atomics load chains
+     * to completely block torn reads during high-frequency worker mutations.
      */
     static getLiveSynchronizedEntities(currentEntities) {
         const entitiesSnapshot = JSON.parse(JSON.stringify(currentEntities ?? {}));
 
         if (EngineMemory && EngineMemory.physicsBuffer) {
             const floatView = new Float32Array(EngineMemory.physicsBuffer);
+            const int32SyncView = new Int32Array(EngineMemory.physicsBuffer);
 
             Object.keys(entitiesSnapshot).forEach(id => {
                 const ent = entitiesSnapshot[id];
                 if (ent && typeof ent.index === 'number') {
                     const offset = ent.index * 16;
+                    const syncIndex = offset + 15;
 
-                    // FIXED STRIDE ACCESS: Eliminates index corruption and securely unifies position channels
+                    // DEFENSIVE PROGRAMMING SPINLOCK SPIN REGULATION
+                    // If the worker is actively writing to this stride, spin-wait until cleared
+                    let lockState = Atomics.load(int32SyncView, syncIndex);
+                    let maxSpins = 1000;
+                    while (lockState === 1 && maxSpins > 0) {
+                        lockState = Atomics.load(int32SyncView, syncIndex);
+                        maxSpins--;
+                    }
+
                     ent.position = [
                         floatView[offset + 0],
                         floatView[offset + 1],
@@ -76,10 +80,6 @@ export class SceneSerializer {
         return entitiesSnapshot;
     }
 
-    /**
-     * Serializa únicamente el estado volátil del Viewport activo extrayendo la física real.
-     * @param {Object} currentEntities - Reference to active un-synchronized entities.
-     */
     static serializeActiveViewportState(currentEntities) {
         return {
             entities: this.getLiveSynchronizedEntities(currentEntities),
@@ -87,11 +87,6 @@ export class SceneSerializer {
         };
     }
 
-    /**
-     * Compila la totalidad del Proyecto de Videojuego (El Storyboard completo).
-     * @param {Object} currentStoreState - Current snapshot instance of the Zustand system.
-     * @param {boolean} forceRuntime - Overwrite compilation target flags for production distributions.
-     */
     static serializeFullProjectBundle(currentStoreState, forceRuntime = false) {
         return {
             engineVersion: "1.0.0",
@@ -104,9 +99,6 @@ export class SceneSerializer {
         };
     }
 
-    /**
-     * Direct interface bindings for persistent disk communication layers.
-     */
     static async saveCurrentScene(currentStoreState) {
         const fullBundle = this.serializeFullProjectBundle(currentStoreState, false);
         return await TauriBridge.saveScene(fullBundle);
