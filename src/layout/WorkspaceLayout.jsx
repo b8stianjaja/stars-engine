@@ -22,7 +22,7 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
     const rightInspectorRef = useRef(null);
     const logicEditorWrapperRef = useRef(null);
 
-    // PIPELINE DE ORQUESTACIÓN CINEMÁTICA DE INTERFAZ (GSAP LAYOUT MUTATION)
+    // DETERMINISTIC HARDWARE-ACCELERATED TRANSITION RAIL
     useEffect(() => {
         if (isBuildRuntime) return;
 
@@ -34,28 +34,30 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
 
         if (studioMode === 'logic') {
             gsap.timeline()
-                .to(leftSidebar, { xPercent: -100, opacity: 0, duration: 0.4, ease: "power3.inOut" }, 0)
-                .to(rightInspector, { xPercent: 100, opacity: 0, duration: 0.4, ease: "power3.inOut" }, 0)
+                .to(leftSidebar, { xPercent: -105, autoAlpha: 0, duration: 0.35, ease: "power3.inOut" }, 0)
+                .to(rightInspector, { xPercent: 105, autoAlpha: 0, duration: 0.35, ease: "power3.inOut" }, 0)
                 .fromTo(logicEditor,
-                    { xPercent: 100, opacity: 0 },
-                    { xPercent: 0, opacity: 1, duration: 0.5, ease: "power4.out" }, 0.1
+                    { xPercent: 100, autoAlpha: 0 },
+                    { xPercent: 0, autoAlpha: 1, pointerEvents: 'all', duration: 0.45, ease: "power4.out" }, 0.08
                 );
         } else {
             gsap.timeline()
-                .to(logicEditor, { xPercent: 100, opacity: 0, duration: 0.35, ease: "power2.in" }, 0)
-                .to(leftSidebar, { xPercent: 0, opacity: 1, duration: 0.45, ease: "power4.out" }, 0.05)
-                .to(rightInspector, { xPercent: 0, opacity: 1, duration: 0.45, ease: "power4.out" }, 0.05);
+                .to(logicEditor, { xPercent: 105, autoAlpha: 0, pointerEvents: 'none', duration: 0.3, ease: "power2.in" }, 0)
+                .to(leftSidebar, { xPercent: 0, autoAlpha: 1, duration: 0.4, ease: "power4.out" }, 0.05)
+                .to(rightInspector, { xPercent: 0, autoAlpha: 1, duration: 0.4, ease: "power4.out" }, 0.05);
         }
     }, [studioMode, isBuildRuntime]);
 
-    const toggleTheme = () => document.documentElement.classList.toggle('dark-theme');
+    const toggleTheme = () => {
+        document.documentElement.classList.toggle('dark-theme');
+    };
 
     const zIndices = useMemo(() => {
         return paintMode ? { background: 1, canvas3D: 10, midground: 15, foreground: 20 }
             : { background: 1, midground: 2, foreground: 3, canvas3D: 30 };
     }, [paintMode]);
 
-    // MODO PRODUCCIÓN: JUEGO FINAL EMPAQUETADO (.EXE)
+    // PRODUCTION RUNTIME: STANDALONE EXE LAYER DISTRIBUTOR
     if (isBuildRuntime) {
         return (
             <div style={{ width: '100vw', height: '100vh', background: '#000000', overflow: 'hidden', position: 'relative' }}>
@@ -67,31 +69,40 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
         );
     }
 
-    // MODO ESTUDIO: ENTORNO DE DESARROLLO E INSPECCIÓN
+    // STUDIO DEVEOPMENT WORKSPACE
     return (
         <div style={{
-            width: '100vw', height: '100vh', background: 'var(--bg-app)', overflow: 'hidden',
-            display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-sans)', userSelect: 'none'
+            width: '100vw', height: '100vh', background: '#0b0b0c', overflow: 'hidden',
+            display: 'flex', flexDirection: 'column', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif', userSelect: 'none', boxSizing: 'border-box'
         }}>
             <CollaborationHeader worker={worker} />
             <ProjectSystemControls worker={worker} />
 
-            <div style={{ display: 'flex', flex: 1, width: '100%', height: 'calc(100% - 79px)', overflow: 'hidden', position: 'relative' }}>
+            {/* FLEX WRAPPER PREVENTS INTERFACE LEAKING OR OVERFLOW FIELDS */}
+            <div style={{
+                position: 'relative',
+                flex: 1,
+                width: '100%',
+                overflow: 'hidden',
+                display: 'flex',
+                background: '#0b0b0c'
+            }}>
 
-                {/* PANEL IZQUIERDO: ÁRBOL DE ENTIDADES */}
+                {/* LEFT VIEWPORT: FLUID TREE ALLOCATOR */}
                 <div
                     ref={leftSidebarRef}
                     style={{
                         position: 'absolute', top: '12px', left: '12px', width: '320px', height: 'calc(100% - 24px)',
-                        background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)',
-                        border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', zIndex: 100, overflow: 'hidden',
-                        willChange: 'transform, opacity', backfaceVisibility: 'hidden', boxShadow: 'var(--shadow-premium)'
+                        background: 'rgba(20, 20, 22, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', zIndex: 100, overflow: 'hidden',
+                        willChange: 'transform, opacity', backfaceVisibility: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+                        boxSizing: 'border-box', display: 'flex', flexDirection: 'column'
                     }}
                 >
                     <WorkspaceSidebar worker={worker} toggleTheme={toggleTheme} isDark={true} />
                 </div>
 
-                {/* CENTRO: LIENZO R3F Y 2.5D */}
+                {/* MAIN DESEGREGATED RENDERING LANES */}
                 <div style={{ position: 'relative', flex: 1, height: '100%', overflow: 'hidden', display: 'flex' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.background }}><DrawingCanvasLayer targetLayer="background" /></div>
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: zIndices.canvas3D }}><EngineCanvas worker={worker} /></div>
@@ -100,29 +111,31 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
 
                     <TelemetryHUD sharedBuffer={EngineMemory.physicsBuffer} />
 
-                    {/* PANEL DE INYECCIÓN LÓGICA (MONACO EDITOR) */}
+                    {/* CENTRAL FLOATING MONACO HOT LOGIC CONTROLLER */}
                     <div
                         ref={logicEditorWrapperRef}
                         style={{
-                            position: 'absolute', top: '12px', right: '12px', width: 'calc(50% - 18px)', height: 'calc(100% - 24px)',
-                            background: 'var(--bg-panel)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)',
-                            border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', zIndex: 110, overflow: 'hidden',
-                            transform: 'translateX(100%)', opacity: 0, pointerEvents: 'none',
-                            willChange: 'transform, opacity', backfaceVisibility: 'hidden', boxShadow: 'var(--shadow-premium)'
+                            position: 'absolute', top: '12px', left: '12px', width: 'calc(100% - 24px)', height: 'calc(100% - 24px)',
+                            background: 'rgba(16, 16, 18, 0.94)', backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
+                            border: '1px solid rgba(0, 113, 227, 0.3)', borderRadius: '12px', zIndex: 110, overflow: 'hidden',
+                            transform: 'translateX(105%)', opacity: 0, pointerEvents: 'none',
+                            willChange: 'transform, opacity', backfaceVisibility: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+                            boxSizing: 'border-box'
                         }}
                     >
                         <LiveEditor worker={worker} />
                     </div>
                 </div>
 
-                {/* PANEL DERECHO: INSPECTOR DE PROPIEDADES */}
+                {/* RIGHT VIEWPORT: REFLECTIVE COMPONENT DATA INSPECTOR */}
                 <div
                     ref={rightInspectorRef}
                     style={{
                         position: 'absolute', top: '12px', right: '12px', width: '340px', height: 'calc(100% - 24px)',
-                        background: 'var(--bg-sidebar)', backdropFilter: 'var(--blur-panel)', WebkitBackdropFilter: 'var(--blur-panel)',
-                        border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', zIndex: 100, overflow: 'hidden',
-                        willChange: 'transform, opacity', backfaceVisibility: 'hidden', boxShadow: 'var(--shadow-premium)'
+                        background: 'rgba(20, 20, 22, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '10px', zIndex: 100, overflow: 'hidden',
+                        willChange: 'transform, opacity', backfaceVisibility: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+                        boxSizing: 'border-box', display: 'flex', flexDirection: 'column'
                     }}
                 >
                     <DataInspectorPanel worker={worker} />

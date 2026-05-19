@@ -9,21 +9,71 @@ export function App() {
         <>
             <style>{`
                 :root {
-                    --bg-app: #070709; --bg-sidebar: rgba(10, 10, 12, 0.75); --bg-panel: rgba(18, 18, 22, 0.85);
-                    --bg-input: #1a1a20; --bg-input-hover: #24242e; --bg-active: #0071e3;
-                    --text-main: #f5f5f7; --text-secondary: #86868b; --text-active: #ffffff;
-                    --border: rgba(255, 255, 255, 0.05); --accent: #0071e3;
+                    --bg-app: #08080a; 
+                    --bg-sidebar: rgba(11, 11, 14, 0.65); 
+                    --bg-panel: rgba(18, 18, 24, 0.82);
+                    --bg-input: #131318; 
+                    --bg-input-hover: #1a1a24; 
+                    --bg-active: #0071e3;
+                    --text-main: #f5f5f7; 
+                    --text-secondary: #86868b; 
+                    --text-muted: #424245;
+                    --text-active: #ffffff;
+                    --border: rgba(255, 255, 255, 0.05); 
+                    --border-hover: rgba(255, 255, 255, 0.12);
+                    --accent: #0071e3;
+                    --accent-glow: rgba(0, 113, 227, 0.35);
                     --accent-subtle: rgba(0, 113, 227, 0.12);
-                    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
-                    --blur-panel: blur(28px); --radius-md: 10px; --radius-sm: 6px;
-                    --shadow-premium: 0 12px 40px rgba(0,0,0,0.6);
+                    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+                    --blur-panel: blur(32px); 
+                    --radius-lg: 12px;
+                    --radius-md: 8px;
+                    --radius-sm: 6px;
+                    --shadow-premium: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 1px rgba(255, 255, 255, 0.08) inset;
                 }
-                html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-app); }
-                * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
-                ::-webkit-scrollbar { width: 5px; height: 5px; }
-                ::-webkit-scrollbar-track { background: transparent; }
-                ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-                ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+                
+                html, body, #root { 
+                    margin: 0; 
+                    padding: 0; 
+                    width: 100%; 
+                    height: 100%; 
+                    overflow: hidden; 
+                    background-color: var(--bg-app); 
+                    color: var(--text-main);
+                    font-family: var(--font-sans);
+                }
+                
+                * { 
+                    box-sizing: border-box; 
+                    -webkit-font-smoothing: antialiased; 
+                    -moz-osx-font-smoothing: grayscale;
+                }
+                
+                /* Custom Premium Studio Scrollbars */
+                ::-webkit-scrollbar { 
+                    width: 6px; 
+                    height: 6px; 
+                }
+                ::-webkit-scrollbar-track { 
+                    background: transparent; 
+                }
+                ::-webkit-scrollbar-thumb { 
+                    background: rgba(255, 255, 255, 0.08); 
+                    border-radius: 20px; 
+                    border: 1px solid transparent;
+                    background-clip: padding-box;
+                }
+                ::-webkit-scrollbar-thumb:hover { 
+                    background: rgba(255, 255, 255, 0.2); 
+                    border-radius: 20px;
+                    border: 1px solid transparent;
+                    background-clip: padding-box;
+                }
+                
+                /* Form Control Overrides for Visual Consistency */
+                select, input, button {
+                    font-family: inherit;
+                }
             `}</style>
 
             <WorkspaceLayout

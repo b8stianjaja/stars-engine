@@ -11,23 +11,42 @@ export const ProjectSystemControls = memo(function ProjectSystemControls({ worke
     const studioMode = useSystemicStore(state => state.workspace.studioMode ?? 'design');
     const hasEntities = useSystemicStore(state => Object.keys(state.entities ?? {}).length > 0);
 
-    // MECANISMOS DINÁMICOS DE INTERACCIÓN CINETICA (GSAP INTERPOLATIONS)
     const handleActionHover = (e, isDisabled) => {
         if (isDisabled) return;
         gsap.to(e.currentTarget, {
-            scale: 1.025,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-            duration: 0.2,
-            ease: 'expo.out'
+            backgroundColor: 'rgba(255, 255, 255, 0.08)',
+            y: -0.5,
+            duration: 0.15,
+            ease: 'power1.out'
         });
     };
 
     const handleActionLeave = (e, isDisabled) => {
         if (isDisabled) return;
         gsap.to(e.currentTarget, {
-            scale: 1.0,
+            backgroundColor: 'transparent',
+            y: 0,
+            duration: 0.2,
+            ease: 'power2.out'
+        });
+    };
+
+    const handlePrimaryHover = (e, isDisabled) => {
+        if (isDisabled) return;
+        gsap.to(e.currentTarget, {
+            backgroundColor: '#007aff',
+            boxShadow: '0 2px 8px rgba(0, 113, 227, 0.4)',
+            duration: 0.15,
+            ease: 'power1.out'
+        });
+    };
+
+    const handlePrimaryLeave = (e, isDisabled) => {
+        if (isDisabled) return;
+        gsap.to(e.currentTarget, {
+            backgroundColor: '#0071e3',
             boxShadow: 'none',
-            duration: 0.25,
+            duration: 0.2,
             ease: 'power2.out'
         });
     };
@@ -36,7 +55,7 @@ export const ProjectSystemControls = memo(function ProjectSystemControls({ worke
         if (isDisabled) return;
         gsap.to(e.currentTarget, {
             scale: 0.96,
-            duration: 0.08,
+            duration: 0.06,
             ease: 'power3.out',
             yoyo: true,
             repeat: 1
@@ -83,66 +102,71 @@ export const ProjectSystemControls = memo(function ProjectSystemControls({ worke
         <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            padding: '6px 12px',
-            background: '#1e1e1e',
-            borderBottom: '1px solid #2c2c2c',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            fontSize: '12px',
-            color: '#e0e0e0',
+            gap: '6px',
+            padding: '5px 14px',
+            background: '#141416',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            fontSize: '11px',
+            color: '#bfbfbf',
             userSelect: 'none',
             boxSizing: 'border-box',
-            width: '100%'
+            width: '100%',
+            height: '32px',
+            flexShrink: 0
         }}>
-            {/* Indicador de Estado de Operación Nativa */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '12px' }}>
+            {/* OPERATION STATUS STATE INDICATOR */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '10px' }}>
                 <div style={{
-                    width: '8px',
-                    height: '8px',
+                    width: '6px',
+                    height: '6px',
                     borderRadius: '50%',
-                    background: isOperating ? '#ff9500' : '#34c759',
-                    transition: 'background 0.2s ease'
+                    background: isOperating ? '#ff9500' : '#30d158',
+                    boxShadow: isOperating ? '0 0 6px #ff9500' : '0 0 6px #30d158',
+                    transition: 'all 0.2s ease'
                 }} />
-                <span style={{ fontWeight: '500', color: isOperating ? '#ff9500' : '#8e8e93' }}>
-                    {isOperating ? operationStatus : `Modo: ${studioMode.toUpperCase()}`}
+                <span style={{ fontFamily: 'monospace', fontWeight: '700', color: isOperating ? '#ff9500' : '#8e8e93', textTransform: 'uppercase', letterSpacing: '0.2px' }}>
+                    {isOperating ? operationStatus : `SYS:${studioMode}`}
                 </span>
             </div>
 
-            <div style={{ height: '16px', width: '1px', background: '#2c2c2c', marginRight: '4px' }} />
+            <div style={{ height: '12px', width: '1px', background: 'rgba(255,255,255,0.1)', marginRight: '6px' }} />
 
-            {/* Botón: Guardar Escena Local */}
+            {/* ACTION: SAVE SCENE */}
             <button
                 onClick={(e) => { handleActionPress(e, disabledSaveLoad); handleSave(); }}
-                onMouseEnter={(e) => handleActionHover(e, disabledSaveLoad)}
-                onMouseLeave={(e) => handleActionLeave(e, disabledSaveLoad)}
+                onMouseEnter={(e) => handlePrimaryHover(e, disabledSaveLoad)}
+                onMouseLeave={(e) => handlePrimaryLeave(e, disabledSaveLoad)}
                 disabled={disabledSaveLoad}
                 style={{
-                    background: disabledSaveLoad ? '#2c2c2c' : '#0071e3',
-                    color: '#ffffff',
+                    background: disabledSaveLoad ? 'rgba(255,255,255,0.02)' : '#0071e3',
+                    color: disabledSaveLoad ? '#555555' : '#ffffff',
                     border: 'none',
                     borderRadius: '4px',
-                    padding: '4px 10px',
+                    padding: '3px 12px',
+                    fontSize: '11px',
                     cursor: disabledSaveLoad ? 'not-allowed' : 'pointer',
-                    fontWeight: '500',
+                    fontWeight: '600',
                     outline: 'none',
-                    willChange: 'transform'
+                    willChange: 'transform',
+                    transition: 'color 0.2s, opacity 0.2s'
                 }}
             >
-                Guardar
+                Guardar Escena
             </button>
 
-            {/* Botón: Cargar Escena Local */}
+            {/* ACTION: LOAD SCENE */}
             <button
                 onClick={(e) => { handleActionPress(e, disabledSaveLoad); handleLoad(); }}
                 onMouseEnter={(e) => handleActionHover(e, disabledSaveLoad)}
                 onMouseLeave={(e) => handleActionLeave(e, disabledSaveLoad)}
                 disabled={disabledSaveLoad}
                 style={{
-                    background: '#2c2c2c',
-                    color: disabledSaveLoad ? '#555555' : '#e0e0e0',
-                    border: '1px solid #3a3a3c',
+                    background: 'transparent',
+                    color: disabledSaveLoad ? '#444444' : '#e5e5ea',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
                     borderRadius: '4px',
-                    padding: '4px 10px',
+                    padding: '2px 12px',
+                    fontSize: '11px',
                     cursor: disabledSaveLoad ? 'not-allowed' : 'pointer',
                     fontWeight: '500',
                     outline: 'none',
@@ -152,28 +176,35 @@ export const ProjectSystemControls = memo(function ProjectSystemControls({ worke
                 Cargar
             </button>
 
-            <div style={{ height: '16px', width: '1px', background: '#2c2c2c', margin: '0 4px' }} />
+            <div style={{ height: '12px', width: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 6px' }} />
 
-            {/* Botón: Exportar Distribución Standalone */}
+            {/* ACTION: STANDALONE EXE BUNDLER */}
             <button
                 onClick={(e) => { handleActionPress(e, disabledExport); handleExport(); }}
-                onMouseEnter={(e) => handleActionHover(e, disabledExport)}
-                onMouseLeave={(e) => handleActionLeave(e, disabledExport)}
+                onMouseEnter={(e) => {
+                    if (disabledExport) return;
+                    gsap.to(e.currentTarget, { backgroundColor: 'rgba(48, 209, 88, 0.1)', borderColor: '#30d158', duration: 0.15 });
+                }}
+                onMouseLeave={(e) => {
+                    if (disabledExport) return;
+                    gsap.to(e.currentTarget, { backgroundColor: 'transparent', borderColor: 'rgba(48, 209, 88, 0.4)', duration: 0.2 });
+                }}
                 disabled={disabledExport}
                 style={{
-                    background: disabledExport ? '#2c2c2c' : 'transparent',
-                    color: disabledExport ? '#555555' : '#34c759',
+                    background: 'transparent',
+                    color: disabledExport ? '#444444' : '#30d158',
                     border: '1px solid',
-                    borderColor: disabledExport ? '#3a3a3c' : '#34c759',
+                    borderColor: disabledExport ? 'rgba(255,255,255,0.08)' : 'rgba(48, 209, 88, 0.4)',
                     borderRadius: '4px',
-                    padding: '4px 10px',
+                    padding: '2px 12px',
+                    fontSize: '11px',
                     cursor: disabledExport ? 'not-allowed' : 'pointer',
                     fontWeight: '600',
                     outline: 'none',
                     willChange: 'transform'
                 }}
             >
-                Exportar standalone (.stars)
+                Compilar Standalone (.exe)
             </button>
         </div>
     );

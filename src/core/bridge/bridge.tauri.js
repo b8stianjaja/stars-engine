@@ -41,6 +41,7 @@ export class TauriBridge {
             return true;
         }
         try {
+            // Strictly mapped to match Rust's snake_case command contract
             await invoke('save_script', { file_name: fileName, code });
             return true;
         } catch (error) {
@@ -80,10 +81,10 @@ export class TauriBridge {
 
             if (!selectedPath) return false;
 
-            // Invocar el comando de clonación binaria profunda e inyección del paquete
+            // FFI ALIGNMENT: Identifiers mapped explicitly to eliminate Rust deserialization faults
             await invoke('export_standalone_game', {
-                targetPath: selectedPath,
-                data: sceneData ?? {}
+                target_path: selectedPath,
+                scene_data: sceneData ?? {}
             });
 
             return true;

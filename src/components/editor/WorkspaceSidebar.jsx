@@ -2,7 +2,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useSystemicStore } from '../../core/engine.store';
 import { ArtistStudioPanel } from './ArtistStudioPanel';
-import { DeveloperStudioPanel } from './DeveloperStudioPanel';
+import { DeveloperStudioPanel } from '../../components/editor/DeveloperStudioPanel';
 
 export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
     const studioMode = useSystemicStore(useShallow(state => state.workspace.studioMode));
@@ -10,89 +10,98 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
 
     return (
         <div style={{
-            width: '340px',
-            height: '100vh',
-            background: 'var(--bg-sidebar)',
-            borderRight: '1px solid var(--border)',
-            padding: '20px 16px',
+            width: '100%',
+            height: '100%',
+            background: 'transparent',
+            padding: '16px',
             boxSizing: 'border-box',
-            color: 'var(--text-main)',
-            fontFamily: 'var(--font-sans)',
-            zIndex: 100,
+            color: '#f5f5f7',
             display: 'flex',
             flexDirection: 'column',
-            gap: '16px',
-            flexShrink: 0,
-            userSelect: 'none',
-            boxShadow: 'var(--shadow-md)',
-            transition: 'background 0.3s, border-color 0.3s'
+            gap: '14px',
+            overflow: 'hidden'
         }}>
-            {/* ENCABEZADO Y CONTROLES DE SISTEMA */}
+            {/* CORE BRAND TRACK TRACKER */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                paddingBottom: '2px'
+                paddingBottom: '2px',
+                flexShrink: 0
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
+                    <div style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: '#34c759',
+                        boxShadow: '0 0 8px #34c759'
+                    }} />
                     <span style={{
-                        fontSize: '15px',
-                        fontWeight: '600',
-                        letterSpacing: '-0.3px',
-                        color: 'var(--text-main)'
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        letterSpacing: '0.8px',
+                        color: '#f5f5f7',
+                        textTransform: 'uppercase'
                     }}>
-                        STARS ENGINE
+                        STARS CORE NODE
                     </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {/* Toggle de Tema Nativo */}
-                    <button
-                        onClick={toggleTheme}
-                        style={{
-                            background: 'transparent',
-                            border: '1px solid var(--border)',
-                            borderRadius: '6px',
-                            width: '24px',
-                            height: '24px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            color: 'var(--text-main)',
-                            fontSize: '12px',
-                            transition: 'all 0.2s',
-                            outline: 'none'
-                        }}
-                    >
-                        {isDark ? '☀️' : '🌙'}
-                    </button>
-                </div>
+                {/* THEME CONTROL RING */}
+                <button
+                    onClick={toggleTheme}
+                    style={{
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '6px',
+                        width: '26px',
+                        height: '26px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: '#f5f5f7',
+                        fontSize: '11px',
+                        transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+                        outline: 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                    }}
+                >
+                    {isDark ? '☀️' : '🌙'}
+                </button>
             </div>
 
-            {/* CONTROL SEGMENTADO TIPO APPLE */}
+            {/* APPLE-STYLE SEGMENTED SPACE SEGMENTS */}
             <div style={{
                 display: 'flex',
-                background: 'var(--bg-input)',
+                background: 'rgba(0, 0, 0, 0.25)',
                 padding: '2px',
-                borderRadius: 'var(--radius-md, 8px)',
-                border: '1px solid var(--border)'
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                flexShrink: 0
             }}>
                 <button
                     onClick={() => setStudioMode('design')}
                     style={{
                         flex: 1,
-                        padding: '7px 0',
+                        padding: '6px 0',
                         fontSize: '12px',
-                        borderRadius: 'var(--radius-sm, 6px)',
+                        borderRadius: '6px',
                         cursor: 'pointer',
                         border: 'none',
-                        background: studioMode === 'design' ? 'var(--bg-panel)' : 'transparent',
-                        color: studioMode === 'design' ? 'var(--text-main)' : 'var(--text-secondary)',
+                        background: studioMode === 'design' ? '#0071e3' : 'transparent',
+                        color: studioMode === 'design' ? '#ffffff' : '#86868b',
                         fontWeight: studioMode === 'design' ? '600' : '500',
                         transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
-                        boxShadow: studioMode === 'design' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
+                        outline: 'none'
                     }}
                 >
                     Diseño Visual
@@ -101,24 +110,31 @@ export function WorkspaceSidebar({ worker, isDark, toggleTheme }) {
                     onClick={() => setStudioMode('logic')}
                     style={{
                         flex: 1,
-                        padding: '7px 0',
+                        padding: '6px 0',
                         fontSize: '12px',
-                        borderRadius: 'var(--radius-sm, 6px)',
+                        borderRadius: '6px',
                         cursor: 'pointer',
                         border: 'none',
-                        background: studioMode === 'logic' ? 'var(--bg-panel)' : 'transparent',
-                        color: studioMode === 'logic' ? 'var(--text-main)' : 'var(--text-secondary)',
+                        background: studioMode === 'logic' ? '#0071e3' : 'transparent',
+                        color: studioMode === 'logic' ? '#ffffff' : '#86868b',
                         fontWeight: studioMode === 'logic' ? '600' : '500',
                         transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
-                        boxShadow: studioMode === 'logic' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
+                        outline: 'none'
                     }}
                 >
-                    Lógica
+                    Mapeo Lógico
                 </button>
             </div>
 
-            {/* AREA OPERATIVA */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* OPERATIONAL FLUID SLATE SCROLL TRACK */}
+            <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                overflowX: 'hidden',
+                overflowY: 'auto',
+                boxSizing: 'border-box'
+            }}>
                 {studioMode === 'design' ? (
                     <ArtistStudioPanel worker={worker} />
                 ) : (

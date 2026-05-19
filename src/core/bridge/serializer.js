@@ -37,19 +37,33 @@ export class SceneSerializer {
         const store = useSystemicStore.getState();
         const entitiesSnapshot = JSON.parse(JSON.stringify(store.entities ?? {}));
 
-        if (EngineMemory.physicsBuffer) {
+        if (EngineMemory && EngineMemory.physicsBuffer) {
             const floatView = new Float32Array(EngineMemory.physicsBuffer);
 
             Object.keys(entitiesSnapshot).forEach(id => {
                 const ent = entitiesSnapshot[id];
-                const offset = ent.index * 16;
+                if (ent && typeof ent.index === 'number') {
+                    const offset = ent.index * 16;
 
-                // Extraer directamente del Stride de memoria real de la GPU/Worker
-                ent.position = [floatView[offset + 0], floatView[offset + 1], floatView[floatView[offset + 2] ? offset + 2 : offset + 2]];
-                ent.quaternion = [floatView[offset + 3], floatView[offset + 4], floatView[offset + 5], floatView[offset + 6]];
-                ent.scale = [floatView[offset + 7], floatView[offset + 8], floatView[offset + 9]];
+                    // FIXED STRIDE ACCESS: Eliminates index corruption and securely unifies position channels
+                    ent.position = [
+                        floatView[offset + 0],
+                        floatView[offset + 1],
+                        floatView[offset + 2]
+                    ];
+                    ent.quaternion = [
+                        floatView[offset + 3],
+                        floatView[offset + 4],
+                        floatView[offset + 5],
+                        floatView[offset + 6]
+                    ];
+                    ent.scale = [
+                        floatView[offset + 7],
+                        floatView[offset + 8],
+                        floatView[offset + 9]
+                    ];
 
-                if (ent.properties) {
+                    if (!ent.properties) ent.properties = {};
                     ent.properties.lastVelocityY = floatView[offset + 10];
                     ent.properties.isGrounded = floatView[offset + 11] === 1.0;
                 }

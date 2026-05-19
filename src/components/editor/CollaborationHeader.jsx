@@ -1,3 +1,4 @@
+// src/components/editor/CollaborationHeader.jsx
 import React, { useState } from 'react';
 import { useSystemicStore } from '../../core/engine.store';
 import { useShallow } from 'zustand/react/shallow';
@@ -18,10 +19,11 @@ export function CollaborationHeader({ worker }) {
         initSyncClient(worker);
     };
 
-    // CONTROLADORES DE MICRO-INTERACCIONES GSAP (HARDWARE ACCELERATED)
+    // INTERACTIVE ACCELERATED GSAP EVENTS
     const handleButtonHover = (e) => {
         gsap.to(e.currentTarget, {
-            scale: 1.03,
+            scale: 1.02,
+            backgroundColor: '#1c1c1e',
             borderColor: 'rgba(255, 255, 255, 0.25)',
             duration: 0.2,
             ease: 'expo.out'
@@ -31,7 +33,8 @@ export function CollaborationHeader({ worker }) {
     const handleButtonLeave = (e) => {
         gsap.to(e.currentTarget, {
             scale: 1.0,
-            borderColor: 'rgba(255, 255, 255, 0.1)',
+            backgroundColor: '#161618',
+            borderColor: 'rgba(255, 255, 255, 0.08)',
             duration: 0.25,
             ease: 'power2.out'
         });
@@ -40,8 +43,8 @@ export function CollaborationHeader({ worker }) {
     const handleRoleHover = (e, isActive) => {
         if (isActive) return;
         gsap.to(e.currentTarget, {
-            scale: 1.02,
-            backgroundColor: 'rgba(255, 255, 255, 0.03)',
+            scale: 1.015,
+            backgroundColor: 'rgba(255, 255, 255, 0.04)',
             color: '#f5f5f7',
             duration: 0.2,
             ease: 'expo.out'
@@ -61,7 +64,7 @@ export function CollaborationHeader({ worker }) {
 
     const handleButtonPress = (e) => {
         gsap.to(e.currentTarget, {
-            scale: 0.96,
+            scale: 0.97,
             duration: 0.08,
             ease: 'power3.out',
             yoyo: true,
@@ -73,17 +76,21 @@ export function CollaborationHeader({ worker }) {
         <div style={styles.header}>
             {/* LOGOTIPO Y ESTADO DE SESIÓN */}
             <div style={styles.brandContainer}>
-                <div style={{ ...styles.ledIndicator, backgroundColor: isConnected ? '#34c759' : '#ff3b30' }} />
-                <span style={styles.brandText}>STARS CORE WORKSPACE</span>
+                <div style={{
+                    ...styles.ledIndicator,
+                    backgroundColor: isConnected ? '#30d158' : '#ff453a',
+                    boxShadow: isConnected ? '0 0 10px #30d158' : '0 0 10px #ff453a'
+                }} />
+                <span style={styles.brandText}>STARS ENGINE DISPATCHER</span>
                 {isConnected && (
                     <div style={styles.telemetryBadge}>
-                        <span>LAN ACTIVA</span>
-                        <span style={styles.latencyText}>{latency ?? 0} ms</span>
+                        <span style={{ letterSpacing: '0.3px' }}>LAN SYNC ACTIVE</span>
+                        <span style={styles.latencyText}>{latency ?? 0}ms</span>
                     </div>
                 )}
             </div>
 
-            {/* PANEL DE CONEXIÓN AL HOST LOCAL */}
+            {/* HOST CONNECTION PIPELINE */}
             <div style={styles.connectionForm}>
                 <input
                     type="text"
@@ -91,6 +98,8 @@ export function CollaborationHeader({ worker }) {
                     onChange={(e) => setInputUrl(e.target.value ?? '')}
                     style={styles.addressInput}
                     placeholder="ws://localhost:3001"
+                    onFocus={(e) => { e.target.style.borderColor = '#0071e3'; e.target.style.boxShadow = '0 0 6px rgba(0,113,227,0.4)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
                 />
                 <button
                     onClick={(e) => { handleButtonPress(e); handleConnectToggle(); }}
@@ -98,11 +107,11 @@ export function CollaborationHeader({ worker }) {
                     onMouseLeave={handleButtonLeave}
                     style={styles.connectButton}
                 >
-                    {isConnected ? 'RECONECTAR' : 'VINCULAR'}
+                    {isConnected ? 'DISCONNECT' : 'LINK NODE'}
                 </button>
             </div>
 
-            {/* SELECTOR SEGMENTADO DE ROL DE TRABAJO COLABORATIVO */}
+            {/* WORK ROLE SEGMENTED MATRIX */}
             <div style={styles.roleSegmentedControl}>
                 <button
                     onClick={(e) => { handleButtonPress(e); setLocalRole('artist'); }}
@@ -111,11 +120,12 @@ export function CollaborationHeader({ worker }) {
                     style={{
                         ...styles.roleButton,
                         backgroundColor: localRole === 'artist' ? '#0071e3' : 'transparent',
-                        color: localRole === 'artist' ? '#fff' : '#86868b',
-                        fontWeight: localRole === 'artist' ? '600' : '500'
+                        color: localRole === 'artist' ? '#ffffff' : '#86868b',
+                        fontWeight: localRole === 'artist' ? '600' : '500',
+                        boxShadow: localRole === 'artist' ? '0 2px 6px rgba(0,0,0,0.3)' : 'none'
                     }}
                 >
-                    🎨 ARTISTA (2.5D Paint & Mesh)
+                    🎨 ARTISTA
                 </button>
                 <button
                     onClick={(e) => { handleButtonPress(e); setLocalRole('developer'); }}
@@ -124,11 +134,12 @@ export function CollaborationHeader({ worker }) {
                     style={{
                         ...styles.roleButton,
                         backgroundColor: localRole === 'developer' ? '#0071e3' : 'transparent',
-                        color: localRole === 'developer' ? '#fff' : '#86868b',
-                        fontWeight: localRole === 'developer' ? '600' : '500'
+                        color: localRole === 'developer' ? '#ffffff' : '#86868b',
+                        fontWeight: localRole === 'developer' ? '600' : '500',
+                        boxShadow: localRole === 'developer' ? '0 2px 6px rgba(0,0,0,0.3)' : 'none'
                     }}
                 >
-                    💻 DESARROLLADOR (Hot Logic Kernel)
+                    💻 DESARROLLADOR
                 </button>
             </div>
         </div>
@@ -136,15 +147,15 @@ export function CollaborationHeader({ worker }) {
 }
 
 const styles = {
-    header: { height: '48px', backgroundColor: '#141416', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif', boxSizing: 'border-box', userSelect: 'none', zIndex: 200 },
+    header: { height: '44px', backgroundColor: '#101012', borderBottom: '1px solid rgba(255, 255, 255, 0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', boxSizing: 'border-box', userSelect: 'none', zIndex: 200 },
     brandContainer: { display: 'flex', alignItems: 'center', gap: '10px' },
-    ledIndicator: { width: '8px', height: '8px', borderRadius: '50%', boxShadow: '0 0 6px currentColor', transition: 'background-color 0.3s' },
-    brandText: { fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px', color: '#f5f5f7' },
-    telemetryBadge: { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#1c1c1e', padding: '3px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: '600', color: '#34c759', border: '1px solid rgba(52, 199, 89, 0.2)' },
-    latencyText: { fontFamily: 'monospace', color: '#fff' },
+    ledIndicator: { width: '7px', height: '7px', borderRadius: '50%', transition: 'all 0.3s' },
+    brandText: { fontSize: '11px', fontWeight: '800', letterSpacing: '0.6px', color: '#f5f5f7' },
+    telemetryBadge: { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(48, 209, 88, 0.06)', padding: '3px 8px', borderRadius: '5px', fontSize: '9px', fontWeight: '700', color: '#30d158', border: '1px solid rgba(48, 209, 88, 0.25)' },
+    latencyText: { fontFamily: 'monospace', color: '#f5f5f7', fontWeight: '600' },
     connectionForm: { display: 'flex', gap: '6px', alignItems: 'center' },
-    addressInput: { backgroundColor: '#222226', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: '#fff', fontSize: '11px', padding: '5px 10px', width: '160px', fontFamily: 'monospace', outline: 'none' },
-    connectButton: { backgroundColor: '#1c1c1e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: '#f5f5f7', fontSize: '11px', fontWeight: '600', padding: '5px 12px', cursor: 'pointer', outline: 'none', willChange: 'transform' },
-    roleSegmentedControl: { display: 'flex', backgroundColor: '#222226', padding: '2px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' },
-    roleButton: { border: 'none', padding: '5px 14px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', transition: 'background-color 0.2s, color 0.2s', background: 'transparent', outline: 'none', willChange: 'transform' }
+    addressInput: { backgroundColor: '#161618', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#ffffff', fontSize: '11px', padding: '5px 10px', width: '150px', fontFamily: 'monospace', outline: 'none', transition: 'all 0.2s ease', boxSizing: 'border-box' },
+    connectButton: { backgroundColor: '#161618', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '5px', color: '#f5f5f7', fontSize: '10px', letterSpacing: '0.3px', 尊fontWeight: '700', padding: '5px 12px', cursor: 'pointer', outline: 'none', willChange: 'transform', transition: 'all 0.2s' },
+    roleSegmentedControl: { display: 'flex', backgroundColor: '#161618', padding: '2px', borderRadius: '7px', border: '1px solid rgba(255,255,255,0.05)' },
+    roleButton: { border: 'none', padding: '4px 12px', fontSize: '10px', letterSpacing: '0.2px', borderRadius: '5px', cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.25, 1, 0.5, 1)', background: 'transparent', outline: 'none', willChange: 'transform' }
 };

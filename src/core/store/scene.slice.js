@@ -1,7 +1,9 @@
 // src/core/store/scene.slice.js
 import { SceneSerializer } from '../bridge/serializer';
+import { EngineMemory, ENGINE_CONFIG } from '../config/memory.config';
 
 const MAX_ENTITIES = 2000;
+const STRIDE_FLOATS = 16;
 
 export const createSceneSlice = (set, get) => ({
     sceneRegistry: {
@@ -30,6 +32,40 @@ export const createSceneSlice = (set, get) => ({
         const currentSceneId = state.sceneRegistry.currentSceneId;
         const currentSnapshot = SceneSerializer.serializeActiveViewportState();
 
+        // BILATERAL BACK-MIGRATION: Extract physical matrices from raw SharedArrayBuffer
+        if (EngineMemory && EngineMemory.physicsBuffer) {
+            const physicsView = new Float32Array(EngineMemory.physicsBuffer);
+
+            Object.keys(currentSnapshot.entities || {}).forEach(id => {
+                const entity = currentSnapshot.entities[id];
+                if (entity && typeof entity.index === 'number') {
+                    const offset = entity.index * STRIDE_FLOATS;
+
+                    // Pull physical telemetry updated by the Web Worker 60Hz loop
+                    entity.position = [
+                        physicsView[offset + 0],
+                        physicsView[offset + 1],
+                        physicsView[offset + 2]
+                    ];
+                    entity.quaternion = [
+                        physicsView[offset + 3],
+                        physicsView[offset + 4],
+                        physicsView[offset + 5],
+                        physicsView[offset + 6]
+                    ];
+                    entity.scale = [
+                        physicsView[offset + 7],
+                        physicsView[offset + 8],
+                        physicsView[offset + 9]
+                    ];
+
+                    if (!entity.properties) entity.properties = {};
+                    entity.properties.lastVelocityY = physicsView[offset + 10];
+                    entity.properties.isGrounded = physicsView[offset + 11] === 1.0;
+                }
+            });
+        }
+
         const updatedScenes = { ...state.sceneRegistry.scenes };
         if (updatedScenes[currentSceneId]) {
             updatedScenes[currentSceneId] = {
@@ -38,7 +74,10 @@ export const createSceneSlice = (set, get) => ({
                 canvasLayers: currentSnapshot.canvasLayers
             };
         }
-        return { sceneRegistry: { ...state.sceneRegistry, scenes: updatedScenes } };
+        return {
+            entities: currentSnapshot.entities,
+            sceneRegistry: { ...state.sceneRegistry, scenes: updatedScenes }
+        };
     }),
 
     switchScene: async (targetSceneId, worker) => {
@@ -47,19 +86,19 @@ export const createSceneSlice = (set, get) => ({
 
         if (currentSceneId === targetSceneId) return;
 
-        // 1. Congelar estado real del nivel saliente
+        // 1. Force back-migration and freeze outgoing level state
         store.commitActiveSceneSnapshot();
 
         const refreshedStore = get();
         const targetSnapshot = refreshedStore.sceneRegistry.scenes[targetSceneId];
         if (!targetSnapshot) return;
 
-        // 2. Limpiar el Kernel Físico del Worker
+        // 2. Instruct Kernel Worker to purge active physical structures
         if (worker) {
             worker.postMessage({ type: 'CLEAR_PHYSICS_WORLD' });
         }
 
-        // 3. PROTECCIÓN CRÍTICA DE POOL: Filtrar índices ocupados por la escena destino
+        // 3. INDEX POOL SANITATION: Calculate clean allocations for incoming scene
         const usedIndices = Object.values(targetSnapshot.entities || {}).map(e => e.index);
         const clearedFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i)
             .filter(idx => !usedIndices.includes(idx));
@@ -71,7 +110,7 @@ export const createSceneSlice = (set, get) => ({
             sceneRegistry: { ...refreshedStore.sceneRegistry, currentSceneId: targetSceneId }
         });
 
-        // 4. Hidratar e inyectar al Worker conservando estados y códigos lógicos
+        // 4. Hydrate Frontend and push logical/physical configurations to Worker
         const nextStore = get();
         Object.keys(targetSnapshot.entities || {}).forEach(id => {
             const entityData = targetSnapshot.entities[id];
@@ -80,12 +119,29 @@ export const createSceneSlice = (set, get) => ({
             if (worker) {
                 worker.postMessage({
                     type: 'ADD_ENTITY_LOGIC',
-                    payload: { id, ...entityData }
+                    payload: {
+                        id,
+                        index: entityData.index,
+                        name: entityData.name,
+                        type: entityData.type,
+                        scriptCode: entityData.scriptCode,
+                        properties: entityData.properties,
+                        x: entityData.position?.[0] ?? 0,
+                        y: entityData.position?.[1] ?? 0,
+                        z: entityData.position?.[2] ?? 0,
+                        rotX: entityData.quaternion?.[0] ?? 0,
+                        rotY: entityData.quaternion?.[1] ?? 0,
+                        rotZ: entityData.quaternion?.[2] ?? 0,
+                        rotW: entityData.quaternion?.[3] ?? 1,
+                        scaleX: entityData.scale?.[0] ?? 1,
+                        scaleY: entityData.scale?.[1] ?? 1,
+                        scaleZ: entityData.scale?.[2] ?? 1
+                    }
                 });
             }
         });
 
-        // 5. Flujo de Re-Pintado Síncrono de Capas
+        // 5. Synchronous UI Canvas Layer Overlays Painting
         ['background', 'midground', 'foreground'].forEach(layerId => {
             const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
             if (canvasElement) {
@@ -103,17 +159,21 @@ export const createSceneSlice = (set, get) => ({
             }
         });
 
-        console.log(`[SceneSystem] Conmutación de contexto completada con éxito. Target: ${targetSceneId}`);
+        console.log(`[SceneSystem] Context switch completed cleanly. Active Target: ${targetSceneId}`);
     },
 
     hydrateFullStoryboard: (bundleData, worker) => {
         const store = get();
         if (!bundleData || !bundleData.sceneRegistry) return;
 
-        if (worker) worker.postMessage({ type: 'CLEAR_PHYSICS_WORLD' });
+        if (worker) {
+            worker.postMessage({ type: 'CLEAR_PHYSICS_WORLD' });
+        }
 
+        // Deep wipe active collections to isolate incoming layout state
         set({
             entities: {},
+            freeIndices: Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i),
             workspace: { ...store.workspace, selectedEntityId: null },
             sceneRegistry: {
                 currentSceneId: bundleData.sceneRegistry.currentSceneId,
@@ -125,7 +185,6 @@ export const createSceneSlice = (set, get) => ({
         const activeSnapshot = bundleData.sceneRegistry.scenes[activeSceneId];
 
         if (activeSnapshot) {
-            // Sincronizar el pool en hidratación de disco duro
             const usedIndices = Object.values(activeSnapshot.entities || {}).map(e => e.index);
             const currentFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i)
                 .filter(idx => !usedIndices.includes(idx));
@@ -137,7 +196,27 @@ export const createSceneSlice = (set, get) => ({
                 const ent = activeSnapshot.entities[id];
                 updatedStore.registerEntity(id, ent, true);
                 if (worker) {
-                    worker.postMessage({ type: 'ADD_ENTITY_LOGIC', payload: { id, ...ent } });
+                    worker.postMessage({
+                        type: 'ADD_ENTITY_LOGIC',
+                        payload: {
+                            id,
+                            index: ent.index,
+                            name: ent.name,
+                            type: ent.type,
+                            scriptCode: ent.scriptCode,
+                            properties: ent.properties,
+                            x: ent.position?.[0] ?? 0,
+                            y: ent.position?.[1] ?? 0,
+                            z: ent.position?.[2] ?? 0,
+                            rotX: ent.quaternion?.[0] ?? 0,
+                            rotY: ent.quaternion?.[1] ?? 0,
+                            rotZ: ent.quaternion?.[2] ?? 0,
+                            rotW: ent.quaternion?.[3] ?? 1,
+                            scaleX: ent.scale?.[0] ?? 1,
+                            scaleY: ent.scale?.[1] ?? 1,
+                            scaleZ: ent.scale?.[2] ?? 1
+                        }
+                    });
                 }
             });
 

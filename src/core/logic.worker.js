@@ -144,7 +144,6 @@ function physicsLoop() {
                         physicsArray[offset + 11] = data.isGrounded ? 1.0 : 0.0;
                     } catch (e) {
                         self.postMessage({ type: 'SCRIPT_STATUS', payload: { id, status: 'RUNTIME_ERROR', error: e.message } });
-                        data.updateLogic = null;
                     }
                 }
             }
@@ -174,19 +173,18 @@ self.onmessage = (e) => {
             break;
 
         case 'ADD_ENTITY_LOGIC': {
-            // Re-hidratar posiciones cinemáticas directas al Stride lineal del buffer compartido
-            const startX = payload.x ?? payload.position?.[0] ?? 0;
-            const startY = payload.y ?? payload.position?.[1] ?? 0;
-            const startZ = payload.z ?? payload.position?.[2] ?? 0;
+            const startX = payload.x ?? 0;
+            const startY = payload.y ?? 0;
+            const startZ = payload.z ?? 0;
 
-            const rotX = payload.rotX ?? payload.quaternion?.[0] ?? 0;
-            const rotY = payload.rotY ?? payload.quaternion?.[1] ?? 0;
-            const rotZ = payload.rotZ ?? payload.quaternion?.[2] ?? 0;
-            const rotW = payload.rotW ?? payload.quaternion?.[3] ?? 1;
+            const rotX = payload.rotX ?? 0;
+            const rotY = payload.rotY ?? 0;
+            const rotZ = payload.rotZ ?? 0;
+            const rotW = payload.rotW ?? 1;
 
-            const scaleX = payload.scaleX || (payload.scale?.[0]) || 1;
-            const scaleY = payload.scaleY || (payload.scale?.[1]) || 1;
-            const scaleZ = payload.scaleZ || (payload.scale?.[2]) || 1;
+            const scaleX = payload.scaleX ?? 1;
+            const scaleY = payload.scaleY ?? 1;
+            const scaleZ = payload.scaleZ ?? 1;
 
             if (physicsArray) {
                 const offset = payload.index * 16;
@@ -204,7 +202,6 @@ self.onmessage = (e) => {
                 physicsArray[offset + 11] = payload.properties?.isGrounded ? 1.0 : 0.0;
             }
 
-            // RE-COMPILACIÓN AUTOMÁTICA EN TRÁNSITO DE ESCENAS (MANDATO HOT-LOGIC)
             let compiledLogicFn = null;
             if (payload.scriptCode) {
                 try {
@@ -265,11 +262,15 @@ self.onmessage = (e) => {
                 const ent = entities.get(payload.id);
                 try {
                     const logicFn = new Function('entity', 'deltaTime', 'Engine', payload.code);
+                    // Test call with mock object to isolate syntax vs execution errors before binding
+                    const testEntity = { ...ent, vx: 0, vy: 0, vz: 0 };
+                    logicFn(testEntity, 0, Engine);
+
                     ent.updateLogic = logicFn;
                     self.postMessage({ type: 'SCRIPT_STATUS', payload: { id: payload.id, status: 'RUNNING', error: null } });
                 } catch (e) {
+                    // DEFENSIBLE ESCAPE LAYER: Log compilation/evaluation faults but RETAIN current execution fallback
                     self.postMessage({ type: 'SCRIPT_STATUS', payload: { id: payload.id, status: 'COMPILE_ERROR', error: e.message } });
-                    ent.updateLogic = null;
                 }
             }
             break;

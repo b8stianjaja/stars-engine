@@ -1,3 +1,4 @@
+// src/core/bridge/sync.client.js
 import { io } from 'socket.io-client';
 import { useSystemicStore } from '../engine.store';
 
@@ -38,6 +39,7 @@ export const initSyncClient = (worker) => {
 
     // --- PIPELINE DE EVENTOS REMOTOS RECIBIDOS ---
     globalSocket.on('SERVER_ENTITY_CREATE', (data) => {
+        if (!data || !data.id) return;
         store.registerEntity(data.id, data.payload, true);
         if (worker) {
             worker.postMessage({ type: 'ADD_ENTITY_LOGIC', payload: { id: data.id, ...data.payload } });
@@ -45,6 +47,7 @@ export const initSyncClient = (worker) => {
     });
 
     globalSocket.on('SERVER_ENTITY_DELETE', (data) => {
+        if (!data || !data.id) return;
         store.removeEntity(data.id, true);
         if (worker) {
             worker.postMessage({ type: 'REMOVE_ENTITY_LOGIC', payload: { id: data.id } });
@@ -52,16 +55,27 @@ export const initSyncClient = (worker) => {
     });
 
     globalSocket.on('SERVER_ENTITY_TRANSFORM', (data) => {
+        if (!data || !data.id || !data.field || !data.value) return;
         store.updateEntityTransform(data.id, data.field, data.value, true);
-        if (worker && data.field === 'position') {
-            worker.postMessage({
-                type: 'UPDATE_PHYSICAL_POS',
-                payload: { id: data.id, x: data.value[0], y: data.value[1], z: data.value[2] }
-            });
+
+        // BILATERAL TRANSFORMATION TRANSMISSION: Map both position and scale updates to the physics kernel
+        if (worker) {
+            if (data.field === 'position') {
+                worker.postMessage({
+                    type: 'UPDATE_PHYSICAL_POS',
+                    payload: { id: data.id, x: data.value[0], y: data.value[1], z: data.value[2] }
+                });
+            } else if (data.field === 'scale') {
+                worker.postMessage({
+                    type: 'UPDATE_PHYSICAL_POS',
+                    payload: { id: data.id, scaleX: data.value[0], scaleY: data.value[1], scaleZ: data.value[2] }
+                });
+            }
         }
     });
 
     globalSocket.on('SERVER_ENTITY_SCRIPT', (data) => {
+        if (!data || !data.id || !data.code) return;
         store.updateEntityScript(data.id, data.code, true);
         if (worker) {
             worker.postMessage({ type: 'INJECT_SCRIPT', payload: { id: data.id, code: data.code } });
@@ -69,6 +83,7 @@ export const initSyncClient = (worker) => {
     });
 
     globalSocket.on('SERVER_ENTITY_PROPERTY', (data) => {
+        if (!data || !data.id || !data.key) return;
         store.updateEntityProperty(data.id, data.key, data.value, true);
         if (worker) {
             worker.postMessage({
