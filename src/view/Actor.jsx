@@ -17,7 +17,9 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
     const materialRef = useRef(null);
 
     const entity = useSystemicStore(useShallow(state => state.entities[id]));
-    const selectEntity = useSystemicStore(state => state.workspace.selectEntity);
+
+    // DEFENSIVE PROGRAMMING PATTERN: Resilient store slice routing abstraction
+    const selectEntity = useSystemicStore(state => state.selectEntity ?? state.workspace?.selectEntity);
 
     const GeometryComponent = useMemo(() => {
         return GEOMETRY_REGISTRY[entity?.type] || GEOMETRY_REGISTRY['box'];
@@ -26,7 +28,7 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
     useFrame(() => {
         if (!meshRef.current || !entity || !globalFloatView) return;
 
-        // SISTEMA ANTI-JUDDER: Evitar colisiones de matrices si el artista arrastra gizmos
+        // ANTI-JUDDER PROTECTION ENGINE: Lock matrix interpolation when local user transforms mesh via gizmos
         if (isSelected && isDraggingRef?.current) return;
 
         const offset = entity.index * 16;
@@ -55,6 +57,7 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
     const isMask = entity.isGhostMask || false;
 
     const handlePointerDown = (e) => {
+        // Absolute containment of pointer event coordinates to shield raw raycast tracks
         e.stopPropagation();
         if (selectEntity) selectEntity(id);
     };
@@ -63,11 +66,13 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
         <mesh
             ref={(node) => {
                 meshRef.current = node;
-                if (isSelected && setTransformTarget) {
+                if (isSelected && setTransformTarget && node) {
                     setTransformTarget(node);
                 }
             }}
             onPointerDown={handlePointerDown}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             castShadow={!isMask}
             receiveShadow={!isMask}
         >
@@ -85,7 +90,7 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
                 opacity={isMask ? 0 : 1}
             />
 
-            {/* SELECCIÓN OUTLINE HEREDADA DE BAJO NIVEL (Cero reference errors por THREE ausente) */}
+            {/* SELECCIÓN OUTLINE HEREDADA DE BAJO NIVEL (Pure nodes to preserve absolute compile-time separation) */}
             {isSelected && (
                 <mesh>
                     {GeometryComponent}

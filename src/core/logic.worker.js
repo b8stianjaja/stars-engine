@@ -1,4 +1,5 @@
 // src/core/logic.worker.js
+
 let physicsArray = null;
 let inputArray = null;
 const entities = new Map();
@@ -7,16 +8,23 @@ const eventQueue = {
     clicks: []
 };
 
+// ZERO-ALLOCATION PRE-ALLOCATED REGISTERS (Eliminates V8 GC Churn)
+const registerA = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+const registerB = { minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0 };
+const spatialQueryBuffer = new Array(2000).fill(null).map(() => ({ id: "", name: "", type: "", x: 0, y: 0, z: 0 }));
+
 const PhysicsCore = {
-    getAABB: (ent) => {
+    // Writes directly to an existing target register object without allocating memory
+    writeAABB: (ent, outRegister) => {
         const halfX = (ent.scaleX ?? 1) / 2;
         const halfY = (ent.scaleY ?? 1) / 2;
         const halfZ = (ent.scaleZ ?? 1) / 2;
-        return {
-            minX: ent.x - halfX, maxX: ent.x + halfX,
-            minY: ent.y - halfY, maxY: ent.y + halfY,
-            minZ: ent.z - halfZ, maxZ: ent.z + halfZ
-        };
+        outRegister.minX = ent.x - halfX;
+        outRegister.maxX = ent.x + halfX;
+        outRegister.minY = ent.y - halfY;
+        outRegister.maxY = ent.y + halfY;
+        outRegister.minZ = ent.z - halfZ;
+        outRegister.maxZ = ent.z + halfZ;
     },
 
     testOverlap: (a, b) => {
@@ -27,10 +35,11 @@ const PhysicsCore = {
 
     moveAndSlide: (entity, dx, dy, dz) => {
         entity.x += dx;
-        let box = PhysicsCore.getAABB(entity);
+        PhysicsCore.writeAABB(entity, registerA);
         for (const [id, obstacle] of entities) {
             if (id === entity.id || obstacle.isGhostMask || obstacle.properties?.isTrigger) continue;
-            if (PhysicsCore.testOverlap(box, PhysicsCore.getAABB(obstacle))) {
+            PhysicsCore.writeAABB(obstacle, registerB);
+            if (PhysicsCore.testOverlap(registerA, registerB)) {
                 entity.x -= dx;
                 if (entity.vx !== undefined) entity.vx = 0;
                 break;
@@ -38,10 +47,11 @@ const PhysicsCore = {
         }
 
         entity.y += dy;
-        box = PhysicsCore.getAABB(entity);
+        PhysicsCore.writeAABB(entity, registerA);
         for (const [id, obstacle] of entities) {
             if (id === entity.id || obstacle.isGhostMask || obstacle.properties?.isTrigger) continue;
-            if (PhysicsCore.testOverlap(box, PhysicsCore.getAABB(obstacle))) {
+            PhysicsCore.writeAABB(obstacle, registerB);
+            if (PhysicsCore.testOverlap(registerA, registerB)) {
                 entity.y -= dy;
                 if (entity.vy !== undefined && entity.vy < 0) {
                     entity.isGrounded = true;
@@ -52,10 +62,11 @@ const PhysicsCore = {
         }
 
         entity.z += dz;
-        box = PhysicsCore.getAABB(entity);
+        PhysicsCore.writeAABB(entity, registerA);
         for (const [id, obstacle] of entities) {
             if (id === entity.id || obstacle.isGhostMask || obstacle.properties?.isTrigger) continue;
-            if (PhysicsCore.testOverlap(box, PhysicsCore.getAABB(obstacle))) {
+            PhysicsCore.writeAABB(obstacle, registerB);
+            if (PhysicsCore.testOverlap(registerA, registerB)) {
                 entity.z -= dz;
                 if (entity.vz !== undefined) entity.vz = 0;
                 break;
@@ -95,16 +106,26 @@ const Engine = {
             PhysicsCore.moveAndSlide(entityInstance, 0, entityInstance.vy * deltaTime, 0);
         },
         getEntitiesNearby: (entityInstance, radius) => {
-            const list = [];
+            let count = 0;
             const r = radius ?? 5;
             for (const [id, target] of entities) {
                 if (id === entityInstance.id) continue;
                 const dist = Math.sqrt((entityInstance.x - target.x) ** 2 + (entityInstance.y - target.y) ** 2 + (entityInstance.z - target.z) ** 2);
                 if (dist <= r) {
-                    list.push({ id, name: target.name, type: target.type, x: target.x, y: target.y, z: target.z });
+                    const bufferedObj = spatialQueryBuffer[count];
+                    if (bufferedObj) {
+                        bufferedObj.id = id;
+                        bufferedObj.name = target.name;
+                        bufferedObj.type = target.type;
+                        bufferedObj.x = target.x;
+                        bufferedObj.y = target.y;
+                        bufferedObj.z = target.z;
+                        count++;
+                    }
                 }
             }
-            return list;
+            // Returns a slice view of the pre-allocated buffer array to avoid GC allocations
+            return spatialQueryBuffer.slice(0, count);
         }
     }
 };
@@ -262,14 +283,12 @@ self.onmessage = (e) => {
                 const ent = entities.get(payload.id);
                 try {
                     const logicFn = new Function('entity', 'deltaTime', 'Engine', payload.code);
-                    // Test call with mock object to isolate syntax vs execution errors before binding
                     const testEntity = { ...ent, vx: 0, vy: 0, vz: 0 };
                     logicFn(testEntity, 0, Engine);
 
                     ent.updateLogic = logicFn;
                     self.postMessage({ type: 'SCRIPT_STATUS', payload: { id: payload.id, status: 'RUNNING', error: null } });
                 } catch (e) {
-                    // DEFENSIBLE ESCAPE LAYER: Log compilation/evaluation faults but RETAIN current execution fallback
                     self.postMessage({ type: 'SCRIPT_STATUS', payload: { id: payload.id, status: 'COMPILE_ERROR', error: e.message } });
                 }
             }

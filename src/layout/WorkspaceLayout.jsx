@@ -22,6 +22,37 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
     const rightInspectorRef = useRef(null);
     const logicEditorWrapperRef = useRef(null);
 
+    // REAL-TIME PHYSICAL STATE BACK-MIGRATION (Mandate 2 Validation Layer)
+    useEffect(() => {
+        const handleSystemSyncRequest = () => {
+            const state = useSystemicStore.getState();
+            const floatView = new Float32Array(EngineMemory.physicsBuffer);
+
+            Object.values(state.entities ?? {}).forEach((entity) => {
+                const offset = entity.index * 16;
+                const livePos = [floatView[offset + 0], floatView[offset + 1], floatView[offset + 2]];
+                const liveRot = [floatView[offset + 3], floatView[offset + 4], floatView[offset + 5], floatView[offset + 6]];
+                const liveSca = [floatView[offset + 7], floatView[offset + 8], floatView[offset + 9]];
+
+                // Write-back directly to local cache tagging remoteOrigin = true to eliminate network reflection echoes
+                if (state.updateEntityTransform) {
+                    state.updateEntityTransform(entity.id, 'position', livePos, true);
+                    state.updateEntityTransform(entity.id, 'scale', liveSca, true);
+                    if (entity.quaternion) {
+                        state.updateEntityTransform(entity.id, 'quaternion', liveRot, true);
+                    }
+                }
+            });
+            console.log('[Back-Migration Kernel] SharedArrayBuffer state successfully mirrored to Zustand cache.');
+        };
+
+        // Bind synchronization hook onto the global workspace interface context
+        window.__STARS_ENGINE_BACK_MIGRATE__ = handleSystemSyncRequest;
+        return () => {
+            delete window.__STARS_ENGINE_BACK_MIGRATE__;
+        };
+    }, []);
+
     // DETERMINISTIC HARDWARE-ACCELERATED TRANSITION RAIL
     useEffect(() => {
         if (isBuildRuntime) return;
@@ -33,6 +64,11 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
         if (!leftSidebar || !rightInspector || !logicEditor) return;
 
         if (studioMode === 'logic') {
+            // Trigger state sync automatically on layout mode transition boundaries
+            if (typeof window.__STARS_ENGINE_BACK_MIGRATE__ === 'function') {
+                window.__STARS_ENGINE_BACK_MIGRATE__();
+            }
+
             gsap.timeline()
                 .to(leftSidebar, { xPercent: -105, autoAlpha: 0, duration: 0.35, ease: "power3.inOut" }, 0)
                 .to(rightInspector, { xPercent: 105, autoAlpha: 0, duration: 0.35, ease: "power3.inOut" }, 0)
@@ -69,7 +105,7 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
         );
     }
 
-    // STUDIO DEVEOPMENT WORKSPACE
+    // STUDIO DEVELOPMENT WORKSPACE
     return (
         <div style={{
             width: '100vw', height: '100vh', background: '#0b0b0c', overflow: 'hidden',
@@ -78,7 +114,6 @@ export function WorkspaceLayout({ worker, isBuildRuntime }) {
             <CollaborationHeader worker={worker} />
             <ProjectSystemControls worker={worker} />
 
-            {/* FLEX WRAPPER PREVENTS INTERFACE LEAKING OR OVERFLOW FIELDS */}
             <div style={{
                 position: 'relative',
                 flex: 1,

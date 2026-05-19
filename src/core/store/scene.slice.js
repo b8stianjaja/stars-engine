@@ -1,6 +1,5 @@
 // src/core/store/scene.slice.js
-import { SceneSerializer } from '../bridge/serializer';
-import { EngineMemory, ENGINE_CONFIG } from '../config/memory.config';
+import { EngineMemory } from '../config/memory.config';
 
 const MAX_ENTITIES = 2000;
 const STRIDE_FLOATS = 16;
@@ -28,20 +27,22 @@ export const createSceneSlice = (set, get) => ({
         return { sceneRegistry: { ...state.sceneRegistry, scenes: newScenes } };
     }),
 
-    commitActiveSceneSnapshot: () => set((state) => {
+    commitActiveSceneSnapshot: () => {
+        const state = get();
         const currentSceneId = state.sceneRegistry.currentSceneId;
-        const currentSnapshot = SceneSerializer.serializeActiveViewportState();
 
-        // BILATERAL BACK-MIGRATION: Extract physical matrices from raw SharedArrayBuffer
+        // DEFENSIBLE RUNTIME IMPORT INTERCEPT: Completely isolates module cycle compilation paths
+        const currentSnapshot = { entities: {}, canvasLayers: { background: null, midground: null, foreground: null } };
+
         if (EngineMemory && EngineMemory.physicsBuffer) {
             const physicsView = new Float32Array(EngineMemory.physicsBuffer);
+            const entitiesSnapshot = JSON.parse(JSON.stringify(state.entities ?? {}));
 
-            Object.keys(currentSnapshot.entities || {}).forEach(id => {
-                const entity = currentSnapshot.entities[id];
+            Object.keys(entitiesSnapshot).forEach(id => {
+                const entity = entitiesSnapshot[id];
                 if (entity && typeof entity.index === 'number') {
                     const offset = entity.index * STRIDE_FLOATS;
 
-                    // Pull physical telemetry updated by the Web Worker 60Hz loop
                     entity.position = [
                         physicsView[offset + 0],
                         physicsView[offset + 1],
@@ -64,7 +65,29 @@ export const createSceneSlice = (set, get) => ({
                     entity.properties.isGrounded = physicsView[offset + 11] === 1.0;
                 }
             });
+            currentSnapshot.entities = entitiesSnapshot;
+        } else {
+            currentSnapshot.entities = JSON.parse(JSON.stringify(state.entities ?? {}));
         }
+
+        // Pull canvas element layers sequentially
+        ['background', 'midground', 'foreground'].forEach(layerId => {
+            const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
+            if (canvasElement) {
+                const context = canvasElement.getContext('2d');
+                if (context) {
+                    try {
+                        const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                        const pixelBuffer = new Uint32Array(imageData.data.buffer);
+                        if (pixelBuffer.some(p => p !== 0)) {
+                            currentSnapshot.canvasLayers[layerId] = canvasElement.toDataURL('image/png');
+                        }
+                    } catch (e) {
+                        // Suppress contextual capture anomalies during fast transits
+                    }
+                }
+            }
+        });
 
         const updatedScenes = { ...state.sceneRegistry.scenes };
         if (updatedScenes[currentSceneId]) {
@@ -74,11 +97,12 @@ export const createSceneSlice = (set, get) => ({
                 canvasLayers: currentSnapshot.canvasLayers
             };
         }
-        return {
+
+        set({
             entities: currentSnapshot.entities,
             sceneRegistry: { ...state.sceneRegistry, scenes: updatedScenes }
-        };
-    }),
+        });
+    },
 
     switchScene: async (targetSceneId, worker) => {
         const store = get();
@@ -146,15 +170,17 @@ export const createSceneSlice = (set, get) => ({
             const canvasElement = document.getElementById(`drawing-canvas-${layerId}`);
             if (canvasElement) {
                 const context = canvasElement.getContext('2d');
-                context.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                if (context) {
+                    context.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-                const cachedDataUrl = targetSnapshot.canvasLayers?.[layerId];
-                if (cachedDataUrl) {
-                    const runtimeImage = new Image();
-                    runtimeImage.onload = () => {
-                        context.drawImage(runtimeImage, 0, 0);
-                    };
-                    runtimeImage.src = cachedDataUrl;
+                    const cachedDataUrl = targetSnapshot.canvasLayers?.[layerId];
+                    if (cachedDataUrl) {
+                        const runtimeImage = new Image();
+                        runtimeImage.onload = () => {
+                            context.drawImage(runtimeImage, 0, 0);
+                        };
+                        runtimeImage.src = cachedDataUrl;
+                    }
                 }
             }
         });
@@ -224,12 +250,14 @@ export const createSceneSlice = (set, get) => ({
                 const canvas = document.getElementById(`drawing-canvas-${layerId}`);
                 if (canvas) {
                     const context = canvas.getContext('2d');
-                    context.clearRect(0, 0, canvas.width, canvas.height);
-                    const dataUrl = activeSnapshot.canvasLayers?.[layerId];
-                    if (dataUrl) {
-                        const img = new Image();
-                        img.onload = () => context.drawImage(img, 0, 0);
-                        img.src = dataUrl;
+                    if (context) {
+                        context.clearRect(0, 0, canvas.width, canvas.height);
+                        const dataUrl = activeSnapshot.canvasLayers?.[layerId];
+                        if (dataUrl) {
+                            const img = new Image();
+                            img.onload = () => context.drawImage(img, 0, 0);
+                            img.src = dataUrl;
+                        }
                     }
                 }
             });

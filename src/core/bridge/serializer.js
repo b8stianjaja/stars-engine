@@ -1,7 +1,6 @@
 // src/core/bridge/serializer.js
-import { useSystemicStore } from '../engine.store';
-import { TauriBridge } from './bridge.tauri';
 import { EngineMemory } from '../config/memory.config';
+import { TauriBridge } from './bridge.tauri';
 
 export class SceneSerializer {
     /**
@@ -16,12 +15,16 @@ export class SceneSerializer {
             if (canvasElement) {
                 const context = canvasElement.getContext('2d');
                 if (context) {
-                    const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height);
-                    const pixelBuffer = new Uint32Array(imageData.data.buffer);
+                    try {
+                        const imageData = context.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                        const pixelBuffer = new Uint32Array(imageData.data.buffer);
 
-                    const hasPixels = pixelBuffer.some(pixel => pixel !== 0);
-                    if (hasPixels) {
-                        layers[layerId] = canvasElement.toDataURL('image/png');
+                        const hasPixels = pixelBuffer.some(pixel => pixel !== 0);
+                        if (hasPixels) {
+                            layers[layerId] = canvasElement.toDataURL('image/png');
+                        }
+                    } catch (e) {
+                        console.warn(`[Serializer Canvas] Layer parsing bypassed for ${layerId}: Context unavailable.`);
                     }
                 }
             }
@@ -32,10 +35,11 @@ export class SceneSerializer {
     /**
      * Intercepta el SharedArrayBuffer y extrae los datos cinemáticos reales
      * mutados por el Web Worker para sincronizarlos en el snapshot inmutable.
+     * @param {Object} currentEntities - Reference to current state entities to map against.
+     * @returns {Object} Deep clone of entities combined with real-time physical telemetry.
      */
-    static getLiveSynchronizedEntities() {
-        const store = useSystemicStore.getState();
-        const entitiesSnapshot = JSON.parse(JSON.stringify(store.entities ?? {}));
+    static getLiveSynchronizedEntities(currentEntities) {
+        const entitiesSnapshot = JSON.parse(JSON.stringify(currentEntities ?? {}));
 
         if (EngineMemory && EngineMemory.physicsBuffer) {
             const floatView = new Float32Array(EngineMemory.physicsBuffer);
@@ -74,51 +78,37 @@ export class SceneSerializer {
 
     /**
      * Serializa únicamente el estado volátil del Viewport activo extrayendo la física real.
+     * @param {Object} currentEntities - Reference to active un-synchronized entities.
      */
-    static serializeActiveViewportState() {
+    static serializeActiveViewportState(currentEntities) {
         return {
-            entities: this.getLiveSynchronizedEntities(),
+            entities: this.getLiveSynchronizedEntities(currentEntities),
             canvasLayers: this.captureCanvasLayers()
         };
     }
 
     /**
      * Compila la totalidad del Proyecto de Videojuego (El Storyboard completo).
+     * @param {Object} currentStoreState - Current snapshot instance of the Zustand system.
+     * @param {boolean} forceRuntime - Overwrite compilation target flags for production distributions.
      */
-    static serializeFullProjectBundle(forceRuntime = false) {
-        const store = useSystemicStore.getState();
-
-        // Commitear el viewport activo extrayendo la memoria real antes del volcado masivo
-        store.commitActiveSceneSnapshot();
-        const refreshedStore = useSystemicStore.getState();
-
+    static serializeFullProjectBundle(currentStoreState, forceRuntime = false) {
         return {
             engineVersion: "1.0.0",
             timestamp: Date.now(),
             editorVisible: !forceRuntime,
-            sceneRegistry: refreshedStore.sceneRegistry,
+            sceneRegistry: currentStoreState.sceneRegistry,
             globalConfiguration: {
-                studioMode: forceRuntime ? "play" : refreshedStore.workspace.studioMode
+                studioMode: forceRuntime ? "play" : (currentStoreState.workspace?.studioMode ?? "design")
             }
         };
     }
 
-    static async saveCurrentScene() {
-        const fullBundle = this.serializeFullProjectBundle(false);
+    /**
+     * Direct interface bindings for persistent disk communication layers.
+     */
+    static async saveCurrentScene(currentStoreState) {
+        const fullBundle = this.serializeFullProjectBundle(currentStoreState, false);
         return await TauriBridge.saveScene(fullBundle);
-    }
-
-    static async loadCurrentScene(worker) {
-        const loadedBundle = await TauriBridge.loadScene();
-        if (!loadedBundle || !loadedBundle.sceneRegistry) return false;
-
-        const store = useSystemicStore.getState();
-        store.hydrateFullStoryboard(loadedBundle, worker);
-        return true;
-    }
-
-    static async exportSceneToFile() {
-        const runtimeBundle = this.serializeFullProjectBundle(true);
-        return await TauriBridge.exportStandaloneScene(runtimeBundle);
     }
 }

@@ -1,3 +1,4 @@
+// src/view/Viewport.jsx
 import { useRef, useEffect, useState, useMemo, Suspense, memo } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -28,8 +29,12 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
     const previousLockRef = useRef(cameraLocked);
     const [transformTarget, setTransformTarget] = useState(null);
 
-    const globalFloatView = useMemo(() => new Float32Array(sharedBuffer), [sharedBuffer]);
+    // SPATIAL DELTA REGISTERS TO PREVENT LAN BACKPRESSURE CHURN
+    const lastSentPos = useRef(new THREE.Vector3());
+    const lastSentSca = useRef(new THREE.Vector3(1, 1, 1));
+    const lastSentRot = useRef(new THREE.Quaternion());
 
+    const globalFloatView = useMemo(() => new Float32Array(sharedBuffer), [sharedBuffer]);
     const isEditorMode = studioMode === 'design' || studioMode === 'logic';
 
     // --- SISTEMA DE CONTROL DE CÁMARA DE DIRECTOR ---
@@ -46,7 +51,7 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
         previousLockRef.current = cameraLocked;
     }, [cameraLocked, camera, saveDirectorCamera, directorCameraData]);
 
-    // --- PIPELINE DE GIZMOS EMITIDO EN TIEMPO REAL ---
+    // --- PIPELINE DE GIZMOS EMITIDO EN TIEMPO REAL CON INTEGRACIÓN BILATERAL CO-AUTHORING ---
     useEffect(() => {
         const controls = transformRef.current;
         if (!controls || !transformTarget || !selectedEntityId) return;
@@ -60,14 +65,23 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
             }
             gl.domElement.style.cursor = isDragging ? 'grabbing' : 'default';
 
-            if (!isDragging) {
+            if (isDragging) {
+                // Initialize registers on drag onset
+                lastSentPos.current.copy(transformTarget.position);
+                lastSentSca.current.copy(transformTarget.scale);
+                lastSentRot.current.copy(transformTarget.quaternion);
+            } else {
+                // Final discrete flush to commit absolute alignment values
                 const pos = transformTarget.position;
                 const sca = transformTarget.scale;
+                const rot = transformTarget.quaternion;
 
                 if (transformMode === 'translate') {
-                    updateEntityTransform(selectedEntityId, 'position', [pos.x, pos.y, pos.z]);
+                    updateEntityTransform(selectedEntityId, 'position', [pos.x, pos.y, pos.z], false);
                 } else if (transformMode === 'scale') {
-                    updateEntityTransform(selectedEntityId, 'scale', [sca.x, sca.y, sca.z]);
+                    updateEntityTransform(selectedEntityId, 'scale', [sca.x, sca.y, sca.z], false);
+                } else if (transformMode === 'rotate') {
+                    updateEntityTransform(selectedEntityId, 'quaternion', [rot.x, rot.y, rot.z, rot.w], false);
                 }
             }
         };
@@ -95,6 +109,12 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                         payload: { id: selectedEntityId, x: pos.x, y: pos.y, z: pos.z }
                     });
                 }
+
+                // Spatial delta throttling rule for inter-thread mirroring stability
+                if (pos.distanceTo(lastSentPos.current) >= 0.02) {
+                    updateEntityTransform(selectedEntityId, 'position', [pos.x, pos.y, pos.z], false);
+                    lastSentPos.current.copy(pos);
+                }
             } else if (transformMode === 'scale') {
                 globalFloatView[offset + 7] = sca.x;
                 globalFloatView[offset + 8] = sca.y;
@@ -105,6 +125,12 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                         type: 'UPDATE_PHYSICAL_POS',
                         payload: { id: selectedEntityId, scaleX: sca.x, scaleY: sca.y, scaleZ: sca.z }
                     });
+                }
+
+                // Scale threshold throttling
+                if (sca.distanceTo(lastSentSca.current) >= 0.02) {
+                    updateEntityTransform(selectedEntityId, 'scale', [sca.x, sca.y, sca.z], false);
+                    lastSentSca.current.copy(sca);
                 }
             } else if (transformMode === 'rotate') {
                 globalFloatView[offset + 3] = rot.x;
@@ -117,6 +143,13 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                         type: 'UPDATE_PHYSICAL_POS',
                         payload: { id: selectedEntityId, rotX: rot.x, rotY: rot.y, rotZ: rot.z, rotW: rot.w }
                     });
+                }
+
+                // Low-allocation quaternion dot product angular difference calculation
+                const dotProduct = Math.abs(rot.x * lastSentRot.current.x + rot.y * lastSentRot.current.y + rot.z * lastSentRot.current.z + rot.w * lastSentRot.current.w);
+                if (1.0 - dotProduct >= 0.002) {
+                    updateEntityTransform(selectedEntityId, 'quaternion', [rot.x, rot.y, rot.z, rot.w], false);
+                    lastSentRot.current.copy(rot);
                 }
             }
         };
@@ -155,6 +188,8 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                 <mesh
                     rotation={[-Math.PI / 2, 0, 0]}
                     position={[0, -0.05, 0]}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onPointerUp={(e) => e.stopPropagation()}
                     onClick={(e) => {
                         e.stopPropagation();
                         if (!isDraggingRef.current) selectEntity(null);

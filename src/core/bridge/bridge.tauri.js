@@ -1,96 +1,115 @@
 // src/core/bridge/bridge.tauri.js
-import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+import { useSystemicStore } from '../engine.store';
 
+// ENVIRONMENT DETECTOR (Mandate 6 Compliance)
 const isTauriEnvironment = () => {
     return typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
 };
 
-export class TauriBridge {
-    static async saveScene(sceneData) {
-        const payload = sceneData ?? {};
-        if (!isTauriEnvironment()) {
-            localStorage.setItem('stars_engine_current_scene', JSON.stringify(payload));
-            return true;
+export const TauriBridge = {
+    /**
+     * Executes real-time back-migration and bundles state data for file-system serialization.
+     * Enforces direct variable parameter mapping matching Rust's expected snake_case structures.
+     */
+    saveScene: async (filePath = null) => {
+        // Force synchronous state back-migration from SharedArrayBuffer into Zustand cache
+        if (typeof window.__STARS_ENGINE_BACK_MIGRATE__ === 'function') {
+            window.__STARS_ENGINE_BACK_MIGRATE__();
         }
-        try {
-            await invoke('save_scene', { data: payload });
-            return true;
-        } catch (error) {
-            console.error(`[TauriBridge] Error en 'saveScene':`, error);
-            return false;
-        }
-    }
 
-    static async loadScene() {
-        if (!isTauriEnvironment()) {
-            const localData = localStorage.getItem('stars_engine_current_scene');
-            return localData ? JSON.parse(localData) : null;
-        }
-        try {
-            return await invoke('load_scene');
-        } catch (error) {
-            console.error(`[TauriBridge] Error en 'loadScene':`, error);
-            return null;
-        }
-    }
+        const currentStore = useSystemicStore.getState();
 
-    static async saveScript(fileName, code) {
-        if (!isTauriEnvironment()) {
-            localStorage.setItem(`stars_script_${fileName}`, code);
-            return true;
+        // Construct the Unified Storyboard Bundle structure (.stars format specification)
+        const projectBundle = {
+            scene_registry: currentStore.sceneRegistry ?? {},
+            current_scene_id: currentStore.currentSceneId ?? 'default_sandbox',
+            entities: currentStore.entities ?? {},
+            camera: currentStore.workspace?.directorCameraData ?? null,
+            editor_visible: !currentStore.workspace?.isBuildRuntime
+        };
+
+        if (isTauriEnvironment()) {
+            try {
+                // FFI Invocation matching expected Rust structural mapping parameters
+                const { invoke } = await import('@tauri-apps/api/core');
+                await invoke('save_project_bundle', {
+                    target_path: filePath,
+                    scene_data: projectBundle,
+                    file_name: `project_${projectBundle.current_scene_id}.stars`
+                });
+                console.log('[FFI Bridge] Native project bundle successfully committed to local storage disk.');
+                return true;
+            } catch (error) {
+                console.error('[FFI Bridge] Native filesystem serialization failure:', error.message);
+                return false;
+            }
+        } else {
+            // WEB SANDBOX FALLBACK LAYER: Execute direct client-side raw Blob stream download
+            try {
+                const serializedData = JSON.stringify(projectBundle, null, 2);
+                localStorage.setItem(`stars_backup_${projectBundle.current_scene_id}`, serializedData);
+
+                const dataBlob = new Blob([serializedData], { type: 'application/json' });
+                const blobUrl = URL.createObjectURL(dataBlob);
+
+                const anchorElement = document.createElement('a');
+                anchorElement.href = blobUrl;
+                anchorElement.download = `sandbox_bundle_${projectBundle.current_scene_id}.stars`;
+                document.body.appendChild(anchorElement);
+                anchorElement.click();
+
+                document.body.removeChild(anchorElement);
+                URL.revokeObjectURL(blobUrl);
+                console.log('[FFI Bridge] Browser sandbox project bundle successfully written via Native Blob URL.');
+                return true;
+            } catch (error) {
+                console.error('[FFI Bridge] Web sandbox fallback serialization failure:', error.message);
+                return false;
+            }
         }
-        try {
-            // Strictly mapped to match Rust's snake_case command contract
-            await invoke('save_script', { file_name: fileName, code });
-            return true;
-        } catch (error) {
-            console.error(`[TauriBridge] Error en 'saveScript':`, error);
-            return false;
-        }
-    }
+    },
 
     /**
-     * Dispara la clonación binaria del binario actual para escribir el juego .exe independiente
+     * Hydrates the entire engine schema via native filesystem streams or fallback local registers.
      */
-    static async exportStandaloneScene(sceneData) {
-        if (!isTauriEnvironment()) {
-            // Fallback de contingencia seguro en modo Web Navegador
-            const jsonString = JSON.stringify(sceneData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'juego_autonomo.stars';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            return true;
+    loadScene: async (filePath = null) => {
+        if (isTauriEnvironment()) {
+            try {
+                const { invoke } = await import('@tauri-apps/api/core');
+                const loadedBundle = await invoke('load_project_bundle', {
+                    target_path: filePath
+                });
+
+                if (loadedBundle && typeof loadedBundle === 'object') {
+                    // Normalize native snake_case format into frontend camelCase parameters cleanly
+                    return {
+                        sceneRegistry: loadedBundle.scene_registry,
+                        currentSceneId: loadedBundle.current_scene_id,
+                        entities: loadedBundle.entities,
+                        directorCameraData: loadedBundle.camera,
+                        editorVisible: loadedBundle.editor_visible
+                    };
+                }
+            } catch (error) {
+                console.warn('[FFI Bridge] Native disk read bypassed or failed. Diverting execution to environment hydration routers.');
+            }
+        } else {
+            try {
+                const fallbackData = localStorage.getItem('stars_backup_default_sandbox');
+                if (fallbackData) {
+                    const parsedBundle = JSON.parse(fallbackData);
+                    return {
+                        sceneRegistry: parsedBundle.scene_registry,
+                        currentSceneId: parsedBundle.current_scene_id,
+                        entities: parsedBundle.entities,
+                        directorCameraData: parsedBundle.camera,
+                        editorVisible: parsedBundle.editor_visible
+                    };
+                }
+            } catch (error) {
+                console.error('[FFI Bridge] Web sandbox hydration engine parse failure:', error.message);
+            }
         }
-
-        try {
-            // Lanzar el cuadro de diálogo nativo de guardado de Windows para elegir la ruta del nuevo ejecutable
-            const selectedPath = await save({
-                title: 'Compilar y Exportar Juego Independiente (.exe)',
-                filters: [{
-                    name: 'Ejecutable Autónomo de Windows',
-                    extensions: ['exe']
-                }]
-            });
-
-            if (!selectedPath) return false;
-
-            // FFI ALIGNMENT: Identifiers mapped explicitly to eliminate Rust deserialization faults
-            await invoke('export_standalone_game', {
-                target_path: selectedPath,
-                scene_data: sceneData ?? {}
-            });
-
-            return true;
-        } catch (error) {
-            console.error(`[TauriBridge] Error crítico durante la exportación del binario autónomo:`, error);
-            return false;
-        }
+        return null;
     }
-}
+};
