@@ -79,7 +79,12 @@ export const ProjectSystemControls = memo(function ProjectSystemControls({ worke
 
     const handleSave = () => {
         executeSafeIO('Guardando...', async () => {
-            await SceneSerializer.saveCurrentScene();
+            // CRITICAL FIX: Extract actual live store object before serialization loop
+            const currentStoreState = useSystemicStore.getState();
+            if (!currentStoreState) {
+                throw new Error("Core store instance could not be resolved.");
+            }
+            await SceneSerializer.saveCurrentScene(currentStoreState);
         });
     };
 

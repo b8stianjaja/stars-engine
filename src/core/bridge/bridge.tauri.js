@@ -1,28 +1,28 @@
 // src/core/bridge/bridge.tauri.js
 import { useSystemicStore } from '../engine.store';
 
-// ENVIRONMENT DETECTOR (Mandate 6 Compliance)
 const isTauriEnvironment = () => {
     return typeof window !== 'undefined' && window.__TAURI_INTERNALS__ !== undefined;
 };
 
 export const TauriBridge = {
-    /**
-     * Executes real-time back-migration and bundles state data for file-system serialization.
-     * Enforces direct variable parameter mapping matching Rust's expected snake_case structures.
-     */
     saveScene: async (filePath = null) => {
-        // Force synchronous state back-migration from SharedArrayBuffer into Zustand cache
+        // Enforce rigid back-migration before serialization
         if (typeof window.__STARS_ENGINE_BACK_MIGRATE__ === 'function') {
             window.__STARS_ENGINE_BACK_MIGRATE__();
         }
 
+        // CRITICAL: Extracted locally within the execution context to prevent closure state drops
         const currentStore = useSystemicStore.getState();
 
-        // Construct the Unified Storyboard Bundle structure (.stars format specification)
+        if (!currentStore || !currentStore.sceneRegistry) {
+            console.error('[FFI Bridge] Critical Error: State extraction failed prior to serialization.');
+            return false;
+        }
+
         const projectBundle = {
-            scene_registry: currentStore.sceneRegistry ?? {},
-            current_scene_id: currentStore.currentSceneId ?? 'default_sandbox',
+            scene_registry: currentStore.sceneRegistry,
+            current_scene_id: currentStore.sceneRegistry.currentSceneId ?? 'default_sandbox',
             entities: currentStore.entities ?? {},
             camera: currentStore.workspace?.directorCameraData ?? null,
             editor_visible: !currentStore.workspace?.isBuildRuntime
@@ -30,21 +30,19 @@ export const TauriBridge = {
 
         if (isTauriEnvironment()) {
             try {
-                // FFI Invocation matching expected Rust structural mapping parameters
                 const { invoke } = await import('@tauri-apps/api/core');
                 await invoke('save_project_bundle', {
                     target_path: filePath,
                     scene_data: projectBundle,
                     file_name: `project_${projectBundle.current_scene_id}.stars`
                 });
-                console.log('[FFI Bridge] Native project bundle successfully committed to local storage disk.');
+                console.log('[FFI Bridge] Native project bundle committed.');
                 return true;
             } catch (error) {
                 console.error('[FFI Bridge] Native filesystem serialization failure:', error.message);
                 return false;
             }
         } else {
-            // WEB SANDBOX FALLBACK LAYER: Execute direct client-side raw Blob stream download
             try {
                 const serializedData = JSON.stringify(projectBundle, null, 2);
                 localStorage.setItem(`stars_backup_${projectBundle.current_scene_id}`, serializedData);
@@ -60,7 +58,7 @@ export const TauriBridge = {
 
                 document.body.removeChild(anchorElement);
                 URL.revokeObjectURL(blobUrl);
-                console.log('[FFI Bridge] Browser sandbox project bundle successfully written via Native Blob URL.');
+                console.log('[FFI Bridge] Browser sandbox project bundle successfully written.');
                 return true;
             } catch (error) {
                 console.error('[FFI Bridge] Web sandbox fallback serialization failure:', error.message);
@@ -69,9 +67,6 @@ export const TauriBridge = {
         }
     },
 
-    /**
-     * Hydrates the entire engine schema via native filesystem streams or fallback local registers.
-     */
     loadScene: async (filePath = null) => {
         if (isTauriEnvironment()) {
             try {
@@ -81,7 +76,6 @@ export const TauriBridge = {
                 });
 
                 if (loadedBundle && typeof loadedBundle === 'object') {
-                    // Normalize native snake_case format into frontend camelCase parameters cleanly
                     return {
                         sceneRegistry: loadedBundle.scene_registry,
                         currentSceneId: loadedBundle.current_scene_id,
@@ -91,7 +85,7 @@ export const TauriBridge = {
                     };
                 }
             } catch (error) {
-                console.warn('[FFI Bridge] Native disk read bypassed or failed. Diverting execution to environment hydration routers.');
+                console.warn('[FFI Bridge] Native disk read bypassed. Diverting execution.');
             }
         } else {
             try {
@@ -107,7 +101,7 @@ export const TauriBridge = {
                     };
                 }
             } catch (error) {
-                console.error('[FFI Bridge] Web sandbox hydration engine parse failure:', error.message);
+                console.error('[FFI Bridge] Parse failure:', error.message);
             }
         }
         return null;

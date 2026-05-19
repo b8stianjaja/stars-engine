@@ -12,7 +12,7 @@ const GEOMETRY_REGISTRY = {
     plane: <planeGeometry args={[1, 1]} />
 };
 
-export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTransformTarget }) {
+export function Actor({ id, globalFloatView, globalIntView, isSelected, isDraggingRef, setTransformTarget }) {
     const meshRef = useRef(null);
     const materialRef = useRef(null);
 
@@ -26,12 +26,19 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
     }, [entity?.type]);
 
     useFrame(() => {
-        if (!meshRef.current || !entity || !globalFloatView) return;
+        if (!meshRef.current || !entity || !globalFloatView || !globalIntView) return;
 
         // ANTI-JUDDER PROTECTION ENGINE: Lock matrix interpolation when local user transforms mesh via gizmos
         if (isSelected && isDraggingRef?.current) return;
 
         const offset = entity.index * 16;
+        const syncIndex = offset + 15;
+
+        // ATOMIC SPIN-WAIT DEFENSE: Block rendering thread from reading partial memory frames
+        let spinWait = 0;
+        while (Atomics.load(globalIntView, syncIndex) === 1 && spinWait < 100) {
+            spinWait++;
+        }
 
         meshRef.current.position.set(
             globalFloatView[offset + 0],
@@ -79,7 +86,7 @@ export function Actor({ id, globalFloatView, isSelected, isDraggingRef, setTrans
             {GeometryComponent}
             <meshStandardMaterial
                 ref={materialRef}
-                color={isSelected ? '#0071e3' : baseColor}
+                color={baseColor}
                 emissive={isSelected ? '#0071e3' : '#000000'}
                 emissiveIntensity={isSelected ? 0.2 : 0}
                 roughness={entity.properties?.roughness ?? 0.5}

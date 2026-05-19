@@ -1,6 +1,8 @@
 // src/core/bridge/sync.client.js
 import { io } from 'socket.io-client';
 import { useSystemicStore } from '../engine.store';
+import { setNetworkSyncEmitter } from '../store/entity.slice';
+import { setSceneNetworkSyncEmitter } from '../store/scene.slice';
 
 let globalSocket = null;
 
@@ -16,6 +18,10 @@ export const initSyncClient = (worker) => {
         autoConnect: true,
         reconnection: true
     });
+
+    // Wire up zero-allocation state-to-network callback references
+    setNetworkSyncEmitter(emitSyncEvent);
+    setSceneNetworkSyncEmitter(emitSyncEvent);
 
     globalSocket.on('connect', () => {
         store.setConnectionStatus(true);
@@ -91,6 +97,22 @@ export const initSyncClient = (worker) => {
                 payload: { id: data.id, properties: { [data.key]: data.value } }
             });
         }
+    });
+
+    // --- PIPELINE DE EVENTOS DE ESCENA / STORYBOARD REMOTOS ---
+    globalSocket.on('SERVER_SCENE_CREATE', (data) => {
+        if (!data || !data.id) return;
+        store.createScene(data.name, true, data.id);
+    });
+
+    globalSocket.on('SERVER_SCENE_SWITCH', (data) => {
+        if (!data || !data.targetSceneId) return;
+        store.switchScene(data.targetSceneId, worker, true);
+    });
+
+    globalSocket.on('SERVER_STORYBOARD_HYDRATE', (data) => {
+        if (!data || !data.bundleData) return;
+        store.hydrateFullStoryboard(data.bundleData, worker, true);
     });
 
     return globalSocket;

@@ -3,11 +3,21 @@
 const MAX_ENTITIES = 2000;
 const initialFreeIndices = Array.from({ length: MAX_ENTITIES }, (_, i) => MAX_ENTITIES - 1 - i);
 
+let networkSyncEmitter = null;
+
+/**
+ * Registers a static high-performance callback pointer to bypass dynamic runtime promise imports
+ * and eliminate V8 Garbage Collection microtask queue allocation churn during rapid engine edits.
+ */
+export const setNetworkSyncEmitter = (emitterFn) => {
+    networkSyncEmitter = emitterFn;
+};
+
 export const createEntitySlice = (set, get) => ({
     entities: {},
     freeIndices: initialFreeIndices,
 
-    // --- MUTADORES ATÓMICOS DE ENTIDADES (CON EMISORES DE RED) ---
+    // --- MUTADORES ATÓMICOS DE ENTIDADES (CON EMISORES DE RED COALESCIDOS) ---
     registerEntity: (id, payload, remoteOrigin = false) => set((state) => {
         if (state.entities[id]) return state;
         const newFreeIndices = [...state.freeIndices];
@@ -24,10 +34,8 @@ export const createEntitySlice = (set, get) => ({
             ...payload
         };
 
-        if (!remoteOrigin) {
-            import('../bridge/sync.client').then(({ emitSyncEvent }) => {
-                emitSyncEvent('NET_ENTITY_CREATE', { id, payload: entityData });
-            });
+        if (!remoteOrigin && networkSyncEmitter) {
+            networkSyncEmitter('NET_ENTITY_CREATE', { id, payload: entityData });
         }
 
         return {
@@ -43,10 +51,8 @@ export const createEntitySlice = (set, get) => ({
         const newEntities = { ...state.entities };
         delete newEntities[id];
 
-        if (!remoteOrigin) {
-            import('../bridge/sync.client').then(({ emitSyncEvent }) => {
-                emitSyncEvent('NET_ENTITY_DELETE', { id });
-            });
+        if (!remoteOrigin && networkSyncEmitter) {
+            networkSyncEmitter('NET_ENTITY_DELETE', { id });
         }
 
         return {
@@ -62,10 +68,8 @@ export const createEntitySlice = (set, get) => ({
     updateEntityTransform: (id, field, value, remoteOrigin = false) => set((state) => {
         if (!state.entities[id]) return state;
 
-        if (!remoteOrigin) {
-            import('../bridge/sync.client').then(({ emitSyncEvent }) => {
-                emitSyncEvent('NET_ENTITY_TRANSFORM', { id, field, value });
-            });
+        if (!remoteOrigin && networkSyncEmitter) {
+            networkSyncEmitter('NET_ENTITY_TRANSFORM', { id, field, value });
         }
 
         return { entities: { ...state.entities, [id]: { ...state.entities[id], [field]: value } } };
@@ -74,10 +78,8 @@ export const createEntitySlice = (set, get) => ({
     updateEntityScript: (id, code, remoteOrigin = false) => set((state) => {
         if (!state.entities[id]) return state;
 
-        if (!remoteOrigin) {
-            import('../bridge/sync.client').then(({ emitSyncEvent }) => {
-                emitSyncEvent('NET_ENTITY_SCRIPT', { id, code });
-            });
+        if (!remoteOrigin && networkSyncEmitter) {
+            networkSyncEmitter('NET_ENTITY_SCRIPT', { id, code });
         }
 
         return { entities: { ...state.entities, [id]: { ...state.entities[id], scriptCode: code } } };
@@ -87,10 +89,8 @@ export const createEntitySlice = (set, get) => ({
         if (!state.entities[id]) return state;
         const currentProperties = state.entities[id].properties ?? {};
 
-        if (!remoteOrigin) {
-            import('../bridge/sync.client').then(({ emitSyncEvent }) => {
-                emitSyncEvent('NET_ENTITY_PROPERTY', { id, key, value });
-            });
+        if (!remoteOrigin && networkSyncEmitter) {
+            networkSyncEmitter('NET_ENTITY_PROPERTY', { id, key, value });
         }
 
         return {

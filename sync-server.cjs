@@ -44,6 +44,19 @@ io.on("connection", (socket) => {
         socket.broadcast.emit("SERVER_ENTITY_PROPERTY", data);
     });
 
+    // Orquestación de Escenas y Carga Global de Bundles Storyboard (.stars)
+    socket.on("NET_SCENE_CREATE", (data) => {
+        socket.broadcast.emit("SERVER_SCENE_CREATE", data);
+    });
+
+    socket.on("NET_SCENE_SWITCH", (data) => {
+        socket.broadcast.emit("SERVER_SCENE_SWITCH", data);
+    });
+
+    socket.on("NET_STORYBOARD_HYDRATE", (data) => {
+        socket.broadcast.emit("SERVER_STORYBOARD_HYDRATE", data);
+    });
+
     // Preservación y Flujo de Arte Ilustrado 2.5D
     socket.on("ARTIST_STROKE", (data) => {
         socket.broadcast.emit("REMOTE_STROKE", data);

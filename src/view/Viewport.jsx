@@ -35,6 +35,7 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
     const lastSentRot = useRef(new THREE.Quaternion());
 
     const globalFloatView = useMemo(() => new Float32Array(sharedBuffer), [sharedBuffer]);
+    const globalIntView = useMemo(() => new Int32Array(sharedBuffer), [sharedBuffer]);
     const isEditorMode = studioMode === 'design' || studioMode === 'logic';
 
     // --- SISTEMA DE CONTROL DE CÁMARA DE DIRECTOR ---
@@ -65,13 +66,15 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
             }
             gl.domElement.style.cursor = isDragging ? 'grabbing' : 'default';
 
+            const entity = useSystemicStore.getState().entities[selectedEntityId];
+            const interactionIndex = entity ? (entity.index * 16) + 14 : null;
+
             if (isDragging) {
-                // Initialize registers on drag onset
+                if (interactionIndex !== null) Atomics.store(globalIntView, interactionIndex, 1);
                 lastSentPos.current.copy(transformTarget.position);
                 lastSentSca.current.copy(transformTarget.scale);
                 lastSentRot.current.copy(transformTarget.quaternion);
             } else {
-                // Final discrete flush to commit absolute alignment values
                 const pos = transformTarget.position;
                 const sca = transformTarget.scale;
                 const rot = transformTarget.quaternion;
@@ -83,6 +86,8 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                 } else if (transformMode === 'rotate') {
                     updateEntityTransform(selectedEntityId, 'quaternion', [rot.x, rot.y, rot.z, rot.w], false);
                 }
+
+                if (interactionIndex !== null) Atomics.store(globalIntView, interactionIndex, 0);
             }
         };
 
@@ -97,6 +102,10 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
             if (!entity) return;
 
             const offset = entity.index * 16;
+            const syncIndex = offset + 15;
+
+            // Enforce Atomic Write Guard
+            Atomics.store(globalIntView, syncIndex, 1);
 
             if (transformMode === 'translate') {
                 globalFloatView[offset + 0] = pos.x;
@@ -110,7 +119,6 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                     });
                 }
 
-                // Spatial delta throttling rule for inter-thread mirroring stability
                 if (pos.distanceTo(lastSentPos.current) >= 0.02) {
                     updateEntityTransform(selectedEntityId, 'position', [pos.x, pos.y, pos.z], false);
                     lastSentPos.current.copy(pos);
@@ -127,7 +135,6 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                     });
                 }
 
-                // Scale threshold throttling
                 if (sca.distanceTo(lastSentSca.current) >= 0.02) {
                     updateEntityTransform(selectedEntityId, 'scale', [sca.x, sca.y, sca.z], false);
                     lastSentSca.current.copy(sca);
@@ -145,13 +152,15 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                     });
                 }
 
-                // Low-allocation quaternion dot product angular difference calculation
                 const dotProduct = Math.abs(rot.x * lastSentRot.current.x + rot.y * lastSentRot.current.y + rot.z * lastSentRot.current.z + rot.w * lastSentRot.current.w);
                 if (1.0 - dotProduct >= 0.002) {
                     updateEntityTransform(selectedEntityId, 'quaternion', [rot.x, rot.y, rot.z, rot.w], false);
                     lastSentRot.current.copy(rot);
                 }
             }
+
+            // Release Atomic Guard
+            Atomics.store(globalIntView, syncIndex, 0);
         };
 
         controls.addEventListener('dragging-changed', handleDraggingChanged);
@@ -161,7 +170,7 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
             controls.removeEventListener('dragging-changed', handleDraggingChanged);
             controls.removeEventListener('change', handleObjectChange);
         };
-    }, [transformMode, selectedEntityId, transformTarget, worker, gl.domElement, cameraLocked, updateEntityTransform, globalFloatView]);
+    }, [transformMode, selectedEntityId, transformTarget, worker, gl.domElement, cameraLocked, updateEntityTransform, globalFloatView, globalIntView]);
 
     useEffect(() => {
         if (!selectedEntityId) setTransformTarget(null);
@@ -206,6 +215,7 @@ export const Viewport = memo(function Viewport({ sharedBuffer, worker }) {
                         key={id}
                         id={id}
                         globalFloatView={globalFloatView}
+                        globalIntView={globalIntView}
                         isSelected={id === selectedEntityId}
                         isDraggingRef={isDraggingRef}
                         setTransformTarget={id === selectedEntityId ? setTransformTarget : null}

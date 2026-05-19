@@ -4,6 +4,16 @@ import { EngineMemory } from '../config/memory.config';
 const MAX_ENTITIES = 2000;
 const STRIDE_FLOATS = 16;
 
+let sceneNetworkSyncEmitter = null;
+
+/**
+ * Registers a static high-performance callback pointer for scene orchestration events,
+ * avoiding microtask allocation cycles and keeping the multi-user environment unified.
+ */
+export const setSceneNetworkSyncEmitter = (emitterFn) => {
+    sceneNetworkSyncEmitter = emitterFn;
+};
+
 export const createSceneSlice = (set, get) => ({
     sceneRegistry: {
         currentSceneId: 'scene_main_menu',
@@ -16,14 +26,19 @@ export const createSceneSlice = (set, get) => ({
         }
     },
 
-    createScene: (name) => set((state) => {
-        const id = `scene_${Date.now()}`;
+    createScene: (name, remoteOrigin = false, forcedId = null) => set((state) => {
+        const id = forcedId ?? `scene_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const newScenes = { ...state.sceneRegistry.scenes };
         newScenes[id] = {
             name: name ?? 'Nueva Escena Alfa',
             entities: {},
             canvasLayers: { background: null, midground: null, foreground: null }
         };
+
+        if (!remoteOrigin && sceneNetworkSyncEmitter) {
+            sceneNetworkSyncEmitter('NET_SCENE_CREATE', { id, name });
+        }
+
         return { sceneRegistry: { ...state.sceneRegistry, scenes: newScenes } };
     }),
 
@@ -104,7 +119,7 @@ export const createSceneSlice = (set, get) => ({
         });
     },
 
-    switchScene: async (targetSceneId, worker) => {
+    switchScene: async (targetSceneId, worker, remoteOrigin = false) => {
         const store = get();
         const currentSceneId = store.sceneRegistry.currentSceneId;
 
@@ -116,6 +131,10 @@ export const createSceneSlice = (set, get) => ({
         const refreshedStore = get();
         const targetSnapshot = refreshedStore.sceneRegistry.scenes[targetSceneId];
         if (!targetSnapshot) return;
+
+        if (!remoteOrigin && sceneNetworkSyncEmitter) {
+            sceneNetworkSyncEmitter('NET_SCENE_SWITCH', { targetSceneId });
+        }
 
         // 2. Instruct Kernel Worker to purge active physical structures
         if (worker) {
@@ -188,9 +207,13 @@ export const createSceneSlice = (set, get) => ({
         console.log(`[SceneSystem] Context switch completed cleanly. Active Target: ${targetSceneId}`);
     },
 
-    hydrateFullStoryboard: (bundleData, worker) => {
+    hydrateFullStoryboard: (bundleData, worker, remoteOrigin = false) => {
         const store = get();
         if (!bundleData || !bundleData.sceneRegistry) return;
+
+        if (!remoteOrigin && sceneNetworkSyncEmitter) {
+            sceneNetworkSyncEmitter('NET_STORYBOARD_HYDRATE', { bundleData });
+        }
 
         if (worker) {
             worker.postMessage({ type: 'CLEAR_PHYSICS_WORLD' });

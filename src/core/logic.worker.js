@@ -142,12 +142,29 @@ function physicsLoop() {
     while (accumulator >= TICK_RATE) {
         if (physicsArray && int32SyncArray) {
             for (const [id, data] of entities) {
+                const offset = data.index * 16;
+                const interactionIndex = offset + 14;
+                const syncIndex = offset + 15;
+
+                // CRITICAL ASYNC RIDE PROTECTION: If the main thread holds the interaction lock flag (Artist dragging gizmo),
+                // bypass the worker execution block for this actor to prevent internal simulation matrix stomping.
+                if (Atomics.load(int32SyncArray, interactionIndex) === 1) {
+                    data.x = physicsArray[offset + 0];
+                    data.y = physicsArray[offset + 1];
+                    data.z = physicsArray[offset + 2];
+                    data.rotX = physicsArray[offset + 3];
+                    data.rotY = physicsArray[offset + 4];
+                    data.rotZ = physicsArray[offset + 5];
+                    data.rotW = physicsArray[offset + 6];
+                    data.scaleX = physicsArray[offset + 7];
+                    data.scaleY = physicsArray[offset + 8];
+                    data.scaleZ = physicsArray[offset + 9];
+                    continue;
+                }
+
                 if (data.updateLogic) {
                     try {
                         data.updateLogic(data, FIXED_DT, Engine);
-
-                        const offset = data.index * 16;
-                        const syncIndex = offset + 15;
 
                         // Enforce explicit Native Atomic Write Sequence (Transaction Lock)
                         Atomics.store(int32SyncArray, syncIndex, 1);
@@ -199,6 +216,12 @@ self.onmessage = (e) => {
             entities.clear();
             if (physicsArray) {
                 physicsArray.fill(0);
+            }
+            break;
+
+        case 'REMOVE_ENTITY_LOGIC':
+            if (payload && payload.id) {
+                entities.delete(payload.id);
             }
             break;
 

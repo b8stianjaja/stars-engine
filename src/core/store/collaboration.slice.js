@@ -4,7 +4,7 @@ export const createCollaborationSlice = (set) => ({
     collaboration: {
         isConnected: false,
         localRole: 'artist', // 'artist' | 'developer'
-        serverUrl: 'http://localhost:3001',
+        serverUrl: 'http://127.0.0.1:3001',
         latency: 0,
         roomCode: 'LAN-SESSION'
     },
